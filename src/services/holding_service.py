@@ -17,7 +17,7 @@ from src.services.result_objects import (
 
 
 class HoldingService:
-    """Service layer for Holdings business logic (C# API compatible)."""
+    """Service layer for Holdings business logic."""
     
     def __init__(self, db: AsyncSession):
         self.db = db
