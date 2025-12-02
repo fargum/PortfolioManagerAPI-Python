@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
     
+    # EOD Historical Data API
+    eod_api_token: str = ""
+    eod_api_base_url: str = "https://eodhd.com/api"
+    eod_api_timeout_seconds: int = 30
+    
     @property
     def async_database_url(self) -> str:
         """Convert postgresql:// to postgresql+asyncpg:// for async operations."""

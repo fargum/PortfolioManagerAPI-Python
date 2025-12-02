@@ -2,6 +2,7 @@
 from typing import List, Optional
 from datetime import datetime, date
 from decimal import Decimal
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -14,13 +15,24 @@ from src.services.result_objects import (
     UpdateHoldingResult,
     DeleteHoldingResult
 )
+from src.services.eod_market_data_tool import EodMarketDataTool
+from src.services.pricing_calculation_service import PricingCalculationService
+
+logger = logging.getLogger(__name__)
 
 
 class HoldingService:
     """Service layer for Holdings business logic."""
     
-    def __init__(self, db: AsyncSession):
+    def __init__(
+        self, 
+        db: AsyncSession, 
+        eod_tool: Optional[EodMarketDataTool] = None,
+        pricing_calculation_service: Optional[PricingCalculationService] = None
+    ):
         self.db = db
+        self.eod_tool = eod_tool
+        self.pricing_calculation_service = pricing_calculation_service
        
     async def get_holdings_by_account_and_date_async(
         self,
@@ -29,6 +41,7 @@ class HoldingService:
     ) -> Optional[List[dict]]:
         """
         Get holdings for an account on a specific date.
+        Supports both historical data retrieval and real-time pricing for current date.
         
         Args:
             account_id: Account ID from authenticated user
@@ -37,6 +50,13 @@ class HoldingService:
         Returns:
             List of holdings with instrument/platform/portfolio details, or None if not found
         """
+        logger.info(f"Retrieving holdings for account {account_id} on date {valuation_date}")
+        
+        today = date.today()
+        
+        # Determine if we need real-time pricing
+        is_today = valuation_date == today
+        
         # Get all portfolios for this account
         result = await self.db.execute(
             select(Portfolio.id).where(Portfolio.account_id == account_id)
@@ -46,10 +66,28 @@ class HoldingService:
         if not portfolio_ids:
             return None
         
-        # Get all holdings for these portfolios on the specified date
-        # Convert date to datetime for comparison (database stores datetime with timezone)
+        # For today's date, get the latest available holdings
+        # For historical dates, get holdings for the specific date
         from sqlalchemy import func, cast, Date
         
+        if is_today:
+            # Get the latest valuation date in the database
+            latest_date_result = await self.db.execute(
+                select(func.max(cast(Holding.valuation_date, Date)))
+                .where(Holding.portfolio_id.in_(portfolio_ids))
+            )
+            latest_date = latest_date_result.scalar()
+            
+            if not latest_date:
+                logger.warning(f"No historical holdings found for account {account_id}")
+                return None
+            
+            query_date = latest_date
+            logger.info(f"Using latest holdings date {latest_date} for real-time pricing")
+        else:
+            query_date = valuation_date
+        
+        # Query holdings for the determined date
         holdings_result = await self.db.execute(
             select(
                 Holding,
@@ -57,6 +95,7 @@ class HoldingService:
                 Instrument.name.label('instrument_name'),
                 Instrument.description,
                 Instrument.currency_code,
+                Instrument.quote_unit,
                 Portfolio.name.label('portfolio_name'),
                 Portfolio.id.label('portfolio_id_joined')
             )
@@ -64,28 +103,53 @@ class HoldingService:
             .join(Portfolio, Holding.portfolio_id == Portfolio.id)
             .where(
                 Holding.portfolio_id.in_(portfolio_ids),
-                cast(Holding.valuation_date, Date) == valuation_date
+                cast(Holding.valuation_date, Date) == query_date
             )
             .order_by(Portfolio.name, Instrument.ticker)
         )
         
+        holdings_rows = holdings_result.all()
+        
+        if not holdings_rows:
+            return None
+        
+        logger.info(f"Retrieved {len(holdings_rows)} holdings from database")
+        
+        # Apply real-time pricing if it's today and EOD tool is available
+        if is_today and self.eod_tool:
+            logger.info("Applying real-time pricing for today's date")
+            holdings_with_details = await self._apply_real_time_pricing(holdings_rows, valuation_date)
+        else:
+            # Use historical data as-is
+            holdings_with_details = self._build_holdings_response(holdings_rows, valuation_date)
+        
+        return holdings_with_details if holdings_with_details else None
+    
+    def _build_holdings_response(
+        self, 
+        holdings_rows: List, 
+        valuation_date: date
+    ) -> List[dict]:
+        """Build holdings response from database rows without real-time pricing."""
         holdings_with_details = []
-        for row in holdings_result:
+        
+        for row in holdings_rows:
             holding = row[0]
-            symbol = row[1]
+            ticker = row[1]
             instrument_name = row[2]
             description = row[3]
             currency_code = row[4]
-            portfolio_name = row[5]
-            portfolio_id_joined = row[6]
+            quote_unit = row[5]  # Now we have quote_unit
+            portfolio_name = row[6]
+            portfolio_id_joined = row[7]
             
             holdings_with_details.append({
                 'holding_id': holding.id,
                 'portfolio_id': portfolio_id_joined,
                 'portfolio_name': portfolio_name,
                 'platform_id': holding.platform_id,
-                'platform_name': '',  # Need to join platform table
-                'ticker': symbol,
+                'platform_name': '',  # TODO: Join platform table
+                'ticker': ticker,
                 'instrument_name': instrument_name,
                 'units': holding.unit_amount,
                 'bought_value': holding.bought_value,
@@ -97,7 +161,171 @@ class HoldingService:
                 'valuation_date': valuation_date
             })
         
-        return holdings_with_details if holdings_with_details else None
+        return holdings_with_details
+    
+    async def _apply_real_time_pricing(
+        self, 
+        holdings_rows: List, 
+        valuation_date: date
+    ) -> List[dict]:
+        """Apply real-time pricing to holdings using EOD market data with proper pricing calculations (no persistence)."""
+        from src.core.constants import ExchangeConstants
+        
+        try:
+            if not self.eod_tool:
+                logger.warning("EOD market data tool not available for real-time pricing")
+                return self._build_holdings_response(holdings_rows, valuation_date)
+            
+            if not self.pricing_calculation_service:
+                logger.warning("Pricing calculation service not available, using direct price multiplication")
+                # Fall back to simple calculation if service not available
+            
+            # Extract unique tickers, excluding CASH (which doesn't need pricing)
+            tickers = list(set(
+                row[1] for row in holdings_rows 
+                if row[1] and row[1].upper() != ExchangeConstants.CASH_TICKER
+            ))  # row[1] is ticker
+            
+            if not tickers:
+                logger.warning("No tickers found for real-time pricing")
+                return self._build_holdings_response(holdings_rows, valuation_date)
+            
+            logger.info(f"Fetching real-time prices for {len(tickers)} tickers")
+            
+            # Fetch real-time prices
+            prices = await self.eod_tool.get_real_time_prices_async(tickers)
+            
+            logger.info(f"Fetched {len(prices)} real-time prices for {len(tickers)} tickers")
+            
+            # Build response with real-time pricing
+            holdings_with_details = []
+            
+            for row in holdings_rows:
+                holding = row[0]
+                ticker = row[1]
+                instrument_name = row[2]
+                description = row[3]
+                currency_code = row[4]
+                quote_unit = row[5]  # Now we have quote_unit
+                portfolio_name = row[6]
+                portfolio_id_joined = row[7]
+                
+                # Check if this is CASH - no pricing needed, units = value
+                if ticker and ticker.upper() == ExchangeConstants.CASH_TICKER:
+                    logger.info(f"CASH instrument detected for holding {holding.id}, using units as current value")
+                    holdings_with_details.append({
+                        'holding_id': holding.id,
+                        'portfolio_id': portfolio_id_joined,
+                        'portfolio_name': portfolio_name,
+                        'platform_id': holding.platform_id,
+                        'platform_name': '',
+                        'ticker': ticker,
+                        'instrument_name': instrument_name,
+                        'units': holding.unit_amount,
+                        'bought_value': holding.bought_value,
+                        'current_value': holding.unit_amount,  # For CASH, units = value
+                        'current_price': Decimal('1.0'),  # CASH always has price of 1.0
+                        'gain_loss': holding.unit_amount - holding.bought_value,
+                        'gain_loss_percentage': ((holding.unit_amount - holding.bought_value) / holding.bought_value * 100) if holding.bought_value > 0 else Decimal('0'),
+                        'currency_code': currency_code or 'GBP',
+                        'valuation_date': valuation_date
+                    })
+                    continue
+                
+                # Check if we have real-time price for this ticker
+                if ticker in prices:
+                    real_time_price = prices[ticker]
+                    
+                    # Apply pricing calculation service if available
+                    if self.pricing_calculation_service:
+                        # Step 1: Apply scaling factor (e.g., ISF ticker)
+                        scaled_price = self.pricing_calculation_service.apply_scaling_factor(
+                            Decimal(str(real_time_price)), 
+                            ticker
+                        )
+                        
+                        # Step 2: Calculate current value with quote unit and currency conversion
+                        # Use currency_code from database - it must be correct
+                        # If missing or wrong, that's a data quality issue that should fail
+                        logger.info(
+                            f"Calling pricing calc for {ticker}: units={holding.unit_amount}, "
+                            f"scaled_price={scaled_price}, quote_unit={quote_unit}, "
+                            f"currency_code={currency_code}"
+                        )
+                        new_current_value = await self.pricing_calculation_service.calculate_current_value_async(
+                            holding.unit_amount,
+                            scaled_price,
+                            quote_unit,
+                            currency_code,  # Use database currency_code directly
+                            valuation_date
+                        )
+                        
+                        logger.info(
+                            f"Calculated holding {holding.id} for {ticker}: "
+                            f"Units={holding.unit_amount}, RawPrice={real_time_price}, "
+                            f"ScaledPrice={scaled_price}, QuoteUnit={quote_unit}, "
+                            f"NewValue={new_current_value}"
+                        )
+                    else:
+                        # Fallback: Simple multiplication without conversions
+                        new_current_value = holding.unit_amount * Decimal(str(real_time_price))
+                        scaled_price = Decimal(str(real_time_price))
+                    
+                    # Calculate daily P&L (change from database value to real-time value)
+                    daily_change = new_current_value - holding.current_value
+                    daily_change_percentage = (daily_change / holding.current_value * 100) if holding.current_value > 0 else Decimal('0')
+                    
+                    logger.info(
+                        f"Updated holding {holding.id} for {ticker}: "
+                        f"Original value {holding.current_value} -> New value {new_current_value}, "
+                        f"Daily P/L: {daily_change} ({daily_change_percentage:.2f}%)"
+                    )
+                    
+                    holdings_with_details.append({
+                        'holding_id': holding.id,
+                        'portfolio_id': portfolio_id_joined,
+                        'portfolio_name': portfolio_name,
+                        'platform_id': holding.platform_id,
+                        'platform_name': '',  # TODO: Join platform table
+                        'ticker': ticker,
+                        'instrument_name': instrument_name,
+                        'units': holding.unit_amount,
+                        'bought_value': holding.bought_value,
+                        'current_value': new_current_value,  # Real-time value converted to GBP
+                        'current_price': scaled_price,  # Scaled real-time price
+                        'gain_loss': new_current_value - holding.bought_value,  # Total gain/loss
+                        'gain_loss_percentage': ((new_current_value - holding.bought_value) / holding.bought_value * 100) if holding.bought_value > 0 else Decimal('0'),
+                        'currency_code': currency_code or 'USD',
+                        'valuation_date': valuation_date
+                    })
+                else:
+                    # No real-time price available, use database values
+                    logger.warning(f"No real-time price available for {ticker}, using database value")
+                    holdings_with_details.append({
+                        'holding_id': holding.id,
+                        'portfolio_id': portfolio_id_joined,
+                        'portfolio_name': portfolio_name,
+                        'platform_id': holding.platform_id,
+                        'platform_name': '',  # TODO: Join platform table
+                        'ticker': ticker,
+                        'instrument_name': instrument_name,
+                        'units': holding.unit_amount,
+                        'bought_value': holding.bought_value,
+                        'current_value': holding.current_value,
+                        'current_price': holding.current_value / holding.unit_amount if holding.unit_amount > 0 else None,
+                        'gain_loss': holding.current_value - holding.bought_value,
+                        'gain_loss_percentage': ((holding.current_value - holding.bought_value) / holding.bought_value * 100) if holding.bought_value > 0 else Decimal('0'),
+                        'currency_code': currency_code or 'USD',
+                        'valuation_date': valuation_date
+                    })
+            
+            logger.info(f"Successfully applied real-time pricing to {len(holdings_with_details)} holdings")
+            return holdings_with_details
+            
+        except Exception as ex:
+            logger.error(f"Error applying real-time pricing: {ex}", exc_info=True)
+            # Fall back to database values
+            return self._build_holdings_response(holdings_rows, valuation_date)
     
     async def add_holding_async(
         self,

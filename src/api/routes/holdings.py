@@ -1,10 +1,15 @@
 from datetime import date, datetime
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.session import get_db
 from src.services.holding_service import HoldingService
+from src.services.eod_market_data_tool import EodMarketDataTool
+from src.services.pricing_calculation_service import PricingCalculationService
+from src.services.currency_conversion_service import CurrencyConversionService
+from src.core.config import settings
 from src.schemas.holding import (
     AccountHoldingsResponse,
     AddHoldingApiRequest,
@@ -19,9 +24,38 @@ from src.schemas.holding import (
 router = APIRouter(prefix="/api/holdings", tags=["holdings"])
 
 
-def get_holding_service(db: AsyncSession = Depends(get_db)) -> HoldingService:
+def get_eod_tool() -> Optional[EodMarketDataTool]:
+    """Dependency to get EOD Market Data Tool instance."""
+    if settings.eod_api_token:
+        return EodMarketDataTool(
+            api_token=settings.eod_api_token,
+            base_url=settings.eod_api_base_url,
+            timeout_seconds=settings.eod_api_timeout_seconds
+        )
+    return None
+
+
+def get_currency_conversion_service(
+    db: AsyncSession = Depends(get_db)
+) -> CurrencyConversionService:
+    """Dependency to get CurrencyConversionService instance."""
+    return CurrencyConversionService(db)
+
+
+def get_pricing_calculation_service(
+    currency_service: CurrencyConversionService = Depends(get_currency_conversion_service)
+) -> PricingCalculationService:
+    """Dependency to get PricingCalculationService instance."""
+    return PricingCalculationService(currency_service)
+
+
+def get_holding_service(
+    db: AsyncSession = Depends(get_db),
+    eod_tool: Optional[EodMarketDataTool] = Depends(get_eod_tool),
+    pricing_service: Optional[PricingCalculationService] = Depends(get_pricing_calculation_service)
+) -> HoldingService:
     """Dependency to get HoldingService instance."""
-    return HoldingService(db)
+    return HoldingService(db, eod_tool, pricing_service)
 
 
 async def get_current_account_id() -> int:
