@@ -1,5 +1,6 @@
 """Instrument model representing financial instruments in the database."""
 from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy.orm import relationship
 from datetime import datetime
 
 from src.db.session import Base
@@ -24,6 +25,9 @@ class Instrument(Base):
     # Timestamps
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=datetime.utcnow)
+    
+    # Relationships
+    holdings = relationship("Holding", back_populates="instrument")
     
     def __repr__(self) -> str:
         return f"<Instrument(id={self.id}, ticker={self.ticker}, name={self.name})>"

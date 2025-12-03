@@ -38,10 +38,10 @@ class Holding(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=datetime.utcnow)
     
-    # Relationships (uncomment when other models are created)
-    # instrument = relationship("Instrument", back_populates="holdings")
-    # platform = relationship("Platform", back_populates="holdings")
-    # portfolio = relationship("Portfolio", back_populates="holdings")
+    # Relationships 
+    instrument = relationship("Instrument", back_populates="holdings")
+    platform = relationship("Platform", back_populates="holdings")
+    portfolio = relationship("Portfolio", back_populates="holdings")
     
     def __repr__(self) -> str:
         return f"<Holding(id={self.id}, symbol={self.symbol}, quantity={self.quantity})>"

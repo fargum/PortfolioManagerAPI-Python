@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from functools import lru_cache
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
@@ -24,8 +25,9 @@ from src.schemas.holding import (
 router = APIRouter(prefix="/api/holdings", tags=["holdings"])
 
 
+@lru_cache()
 def get_eod_tool() -> Optional[EodMarketDataTool]:
-    """Dependency to get EOD Market Data Tool instance."""
+    """Dependency to get EOD Market Data Tool instance (singleton)."""
     if settings.eod_api_token:
         return EodMarketDataTool(
             api_token=settings.eod_api_token,
