@@ -25,6 +25,7 @@ class Portfolio(Base):
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=datetime.utcnow)
     
     # Relationships
+    account = relationship("Account", back_populates="portfolios")
     holdings = relationship("Holding", back_populates="portfolio")
     
     def __repr__(self) -> str:
