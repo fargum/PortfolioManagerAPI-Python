@@ -15,7 +15,10 @@ python-dotenv==1.2.1
 python-multipart==0.0.20
 httpx==0.28.1
 
-# AI/ML (for future LangChain integration)
-langchain==1.1.0
-langchain-openai==1.1.0
-langgraph==1.0.4
+# AI/ML - Azure OpenAI and Agent Framework
+azure-ai-inference==1.0.0b7
+azure-identity==1.25.1
+openai==2.8.1
+# langchain==1.1.0
+# langchain-openai==1.1.0
+# langgraph==1.0.4

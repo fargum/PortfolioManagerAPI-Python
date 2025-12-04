@@ -34,10 +34,20 @@ class Settings(BaseSettings):
     eod_api_base_url: str = "https://eodhd.com/api"
     eod_api_timeout_seconds: int = 30
     
+    # Azure AI Foundry Configuration 
+    azure_foundry_endpoint: str = ""
+    azure_foundry_api_key: str = ""
+    azure_foundry_model_name: str = "gpt-5-mini"
+    
     @property
     def async_database_url(self) -> str:
         """Convert postgresql:// to postgresql+asyncpg:// for async operations."""
         return self.database_url.replace("postgresql://", "postgresql+asyncpg://")
+    
+    @property
+    def is_azure_foundry_configured(self) -> bool:
+        """Check if Azure Foundry is properly configured."""
+        return bool(self.azure_foundry_endpoint and self.azure_foundry_api_key)
 
 
 # Global settings instance
