@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.config import settings
-from src.api.routes import holdings
+from src.api.routes import holdings, chat
 
 # Configure logging
 logging.basicConfig(
@@ -45,8 +45,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers (router now has its own /api/holdings prefix)
+# Include routers
 app.include_router(holdings.router)
+app.include_router(chat.router)
 
 
 @app.get("/", tags=["Health"])
