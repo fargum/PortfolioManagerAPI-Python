@@ -1,6 +1,7 @@
 """AI Chat routes for streaming conversations."""
 import logging
 from typing import AsyncIterator, Optional
+from functools import lru_cache
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -30,9 +31,14 @@ class ChatHealthResponse(BaseModel):
     model_name: str
 
 
-# Dependencies
+# Dependencies (cached singletons for efficiency)
+@lru_cache()
 def get_chat_service() -> AzureFoundryChatService:
-    """Get configured Azure Foundry chat service."""
+    """
+    Get configured Azure Foundry chat service (singleton).
+    
+    Cached to avoid creating new HTTP clients on every request.
+    """
     client = get_azure_foundry_client()
     if not client:
         raise HTTPException(
@@ -46,8 +52,9 @@ def get_chat_service() -> AzureFoundryChatService:
     )
 
 
+@lru_cache()
 def get_prompt_service() -> AgentPromptService:
-    """Get agent prompt service."""
+    """Get agent prompt service (singleton)."""
     return AgentPromptService()
 
 
@@ -75,7 +82,7 @@ async def stream_chat(
     """
     Stream AI chat response for user query.
     
-    Uses portfolio advisor prompt from Phase 1 and streams tokens in real-time.
+    Uses portfolio advisor prompt and streams tokens in real-time.
     
     Args:
         request: Chat request with query and account_id
