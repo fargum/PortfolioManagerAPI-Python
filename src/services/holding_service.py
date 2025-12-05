@@ -9,6 +9,7 @@ from sqlalchemy import select
 from src.db.models.holding import Holding
 from src.db.models.instrument import Instrument
 from src.db.models.portfolio import Portfolio
+from src.db.models.platform import Platform
 from src.schemas.holding import AddHoldingApiRequest
 from src.services.result_objects import (
     AddHoldingResult,

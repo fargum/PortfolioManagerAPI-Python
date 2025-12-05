@@ -1,0 +1,92 @@
+"""
+LangChain tool for retrieving portfolio holdings.
+"""
+import logging
+from datetime import datetime
+from typing import Annotated
+
+from langchain_core.tools import tool
+
+from src.services.holding_service import HoldingService
+from src.services.ai.utils.date_utilities import DateUtilities
+from src.schemas.holding import PortfolioHoldingDto
+
+logger = logging.getLogger(__name__)
+
+# Global service instance - will be injected
+_holding_service: HoldingService = None
+_account_id: int = None
+
+
+def initialize_holdings_tool(holding_service: HoldingService, account_id: int):
+    """Initialize the tool with required services and account context."""
+    global _holding_service, _account_id
+    _holding_service = holding_service
+    _account_id = account_id
+
+
+@tool
+async def get_portfolio_holdings(
+    date: Annotated[str, "Date for holdings analysis. Use 'today' or current date (YYYY-MM-DD) for real-time data, or specify historical date in various formats (YYYY-MM-DD, DD/MM/YYYY, DD MMMM YYYY, etc.)"]
+) -> dict:
+    """Retrieve portfolio holdings for the authenticated user's account and a specific date.
+    
+    For current/today performance, use today's date to get real-time data.
+    For historical analysis, specify the desired date.
+    
+    Returns a dictionary containing:
+    - AccountId: Account identifier
+    - Date: Requested date
+    - Holdings: List of holdings with ticker, name, platform, units, prices, values
+    - TotalValue: Total portfolio value
+    """
+    try:
+        # Smart date handling: if asking for 'today', 'current', or similar, use today's date
+        effective_date = date
+        if not date or date.lower() in ['today', 'current', 'now']:
+            effective_date = datetime.now().strftime("%Y-%m-%d")
+            logger.info(f"Interpreted '{date}' as today: {effective_date}")
+        
+        # Parse the date
+        parsed_date = DateUtilities.parse_date(effective_date)
+        
+        logger.info(f"Getting portfolio holdings for account {_account_id} on {parsed_date}")
+        
+        # Get holdings from service
+        holdings = await _holding_service.get_holdings_by_account_and_date_async(
+            _account_id, parsed_date
+        )
+        
+        # Convert dict response to DTO objects
+        holdings_dtos = [PortfolioHoldingDto(**h) for h in holdings]
+        total_value = sum(h.current_value for h in holdings_dtos)
+        
+        # Format response
+        return {
+            "AccountId": _account_id,
+            "Date": effective_date,
+            "TotalValue": float(total_value),
+            "Holdings": [
+                {
+                    "Ticker": h.ticker,
+                    "InstrumentName": h.instrument_name,
+                    "Platform": h.platform_name,
+                    "UnitAmount": float(h.units),
+                    "CurrentPrice": float(h.current_price) if h.current_price else 0.0,
+                    "CurrentValue": float(h.current_value),
+                    "BoughtValue": float(h.bought_value),
+                    "UnrealizedGainLoss": float(h.gain_loss),
+                    "GainLoss": float(h.gain_loss),
+                    "GainLossPercentage": float(h.gain_loss_percentage),
+                }
+                for h in holdings_dtos
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting portfolio holdings: {str(e)}", exc_info=True)
+        return {
+            "Error": f"Failed to retrieve portfolio holdings: {str(e)}",
+            "AccountId": _account_id,
+            "Date": date
+        }

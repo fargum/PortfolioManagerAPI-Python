@@ -1,4 +1,4 @@
-"""AI Chat routes for streaming conversations."""
+"""AI Chat routes for streaming conversations with LangGraph agents."""
 import logging
 from typing import AsyncIterator, Optional
 from functools import lru_cache
@@ -6,9 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from src.core.ai_config import get_azure_foundry_client, azure_foundry_config
+from src.core.ai_config import AIConfig
+from src.db.session import get_db_async
+from src.services.holding_service import HoldingService
 from src.services.ai.agent_prompt_service import AgentPromptService
-from src.services.ai.azure_foundry_chat_service import AzureFoundryChatService
+from src.services.ai.langgraph_agent_service import LangGraphAgentService
+from src.services.ai.portfolio_analysis_service import PortfolioAnalysisService
 
 
 logger = logging.getLogger(__name__)
@@ -31,25 +34,11 @@ class ChatHealthResponse(BaseModel):
     model_name: str
 
 
-# Dependencies (cached singletons for efficiency)
+# Dependencies
 @lru_cache()
-def get_chat_service() -> AzureFoundryChatService:
-    """
-    Get configured Azure Foundry chat service (singleton).
-    
-    Cached to avoid creating new HTTP clients on every request.
-    """
-    client = get_azure_foundry_client()
-    if not client:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Azure Foundry is not configured. Please set AZURE_FOUNDRY_ENDPOINT and AZURE_FOUNDRY_API_KEY."
-        )
-    
-    return AzureFoundryChatService(
-        client=client,
-        model_name=azure_foundry_config.model_name
-    )
+def get_ai_config() -> AIConfig:
+    """Get AI configuration (singleton)."""
+    return AIConfig()
 
 
 @lru_cache()
@@ -58,31 +47,61 @@ def get_prompt_service() -> AgentPromptService:
     return AgentPromptService()
 
 
+@lru_cache()
+def get_agent_service() -> LangGraphAgentService:
+    """
+    Get configured LangGraph agent service (singleton).
+    
+    Database session is passed per request when calling stream_chat/chat methods.
+    """
+    ai_config = get_ai_config()
+    prompt_service = get_prompt_service()
+    
+    return LangGraphAgentService(
+        ai_config=ai_config,
+        agent_prompt_service=prompt_service
+    )
+
+
 # Routes
 @router.get("/health", response_model=ChatHealthResponse)
-async def health_check():
+async def health_check(ai_config: AIConfig = Depends(get_ai_config)):
     """
     Health check for AI chat service.
     
     Returns configuration status and model information.
     """
+    is_configured = bool(
+        ai_config.azure_openai_endpoint and 
+        ai_config.azure_openai_api_key and 
+        ai_config.azure_openai_deployment_name
+    )
+    
     return ChatHealthResponse(
-        status="healthy" if azure_foundry_config.is_configured() else "not_configured",
-        azure_configured=azure_foundry_config.is_configured(),
-        model_name=azure_foundry_config.model_name
+        status="healthy" if is_configured else "not_configured",
+        azure_configured=is_configured,
+        model_name=ai_config.azure_openai_deployment_name or "not_configured"
     )
 
 
 @router.post("/stream")
 async def stream_chat(
     request: ChatRequest,
-    chat_service: AzureFoundryChatService = Depends(get_chat_service),
-    prompt_service: AgentPromptService = Depends(get_prompt_service)
+    agent_service: LangGraphAgentService = Depends(get_agent_service),
+    db = Depends(get_db_async)
 ):
     """
-    Stream AI chat response for user query.
+    Stream AI chat response for user query with LangGraph agent and tool calling.
     
-    Uses portfolio advisor prompt and streams tokens in real-time.
+    Uses LangGraph's create_react_agent for stateful workflows with portfolio tools.
+    Automatically handles tool orchestration and streaming.
+    
+    Tools available:
+    - get_portfolio_holdings: Retrieve portfolio holdings
+    - analyze_portfolio_performance: Analyze portfolio performance
+    - compare_portfolio_performance: Compare performance between dates
+    - get_market_context: Get market context (stub)
+    - get_market_sentiment: Get market sentiment (stub)
     
     Args:
         request: Chat request with query and account_id
@@ -93,29 +112,25 @@ async def stream_chat(
     Example:
         POST /api/ai/chat/stream
         {
-            "query": "What is my portfolio value?",
+            "query": "How is my portfolio performing today?",
             "account_id": 123
         }
     """
     try:
-        # Get portfolio advisor prompt from Phase 1
-        system_prompt = prompt_service.get_portfolio_advisor_prompt(
-            account_id=request.account_id
+        logger.info(
+            f"Streaming LangGraph agent for account {request.account_id}, "
+            f"query: {request.query[:50]}..."
         )
         
-        # Build messages for chat
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": request.query}
-        ]
-        
-        logger.info(f"Streaming chat for account {request.account_id}, query: {request.query[:50]}...")
-        
-        # Stream response
+        # Stream response using LangGraph agent
         async def generate() -> AsyncIterator[str]:
             """Generate streaming response."""
             try:
-                async for token in chat_service.complete_chat_streaming_async(messages):
+                async for token in agent_service.stream_chat(
+                    user_message=request.query,
+                    account_id=request.account_id,  # Injected from auth context, not from AI
+                    db=db  # Database session for this request
+                ):
                     # Send token as Server-Sent Event
                     yield f"data: {token}\n\n"
                 
@@ -123,7 +138,7 @@ async def stream_chat(
                 yield "data: [DONE]\n\n"
                 
             except Exception as e:
-                logger.error(f"Error during streaming: {e}")
+                logger.error(f"Error during streaming: {e}", exc_info=True)
                 yield f"data: [ERROR: {str(e)}]\n\n"
         
         return StreamingResponse(
@@ -137,7 +152,7 @@ async def stream_chat(
         )
         
     except Exception as e:
-        logger.error(f"Error in stream_chat: {e}")
+        logger.error(f"Error in stream_chat: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing chat request: {str(e)}"

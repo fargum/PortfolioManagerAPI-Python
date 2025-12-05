@@ -14,11 +14,11 @@ greenlet==3.1.1
 python-dotenv==1.2.1
 python-multipart==0.0.20
 httpx==0.28.1
+python-dateutil==2.9.0
 
-# AI/ML - Azure OpenAI and Agent Framework
-azure-ai-inference==1.0.0b7
+# AI/ML - LangChain and Azure OpenAI
+langchain==1.1.2
+langchain-openai==1.1.0
+langgraph==1.0.4
 azure-identity==1.25.1
 openai==2.8.1
-# langchain==1.1.0
-# langchain-openai==1.1.0
-# langgraph==1.0.4

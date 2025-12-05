@@ -29,6 +29,17 @@ AsyncSessionLocal = async_sessionmaker(
 # Base class for SQLAlchemy models
 Base = declarative_base()
 
+# Import all models to ensure they are registered with SQLAlchemy
+# This must happen after Base is created but before any queries
+from src.db.models import (  # noqa: E402
+    Account,
+    Holding,
+    Instrument,
+    Platform,
+    Portfolio,
+    ExchangeRate
+)
+
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
