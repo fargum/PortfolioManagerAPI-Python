@@ -126,10 +126,10 @@ class TestGetHoldingsByAccountAndDate:
         )
         
         assert result is not None
-        assert len(result) == 1
-        assert result[0]['ticker'] == "AAPL"
-        assert result[0]['current_value'] == Decimal("1500.00")
-        assert result[0]['units'] == Decimal("10.0")
+        assert result.total_holdings == 1
+        assert result.holdings[0].ticker == "AAPL"
+        assert result.holdings[0].current_value == Decimal("1500.00")
+        assert result.holdings[0].units == Decimal("10.0")
 
 
 class TestBuildHoldingsResponse:
