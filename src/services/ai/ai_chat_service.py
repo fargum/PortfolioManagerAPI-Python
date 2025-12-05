@@ -9,7 +9,7 @@ class IAiChatService(Protocol):
     Protocol for AI chat completion services with streaming support.
     
     This defines the interface that all AI chat service implementations must follow.
-    Similar to C# IAiChatService interface.
+    Similar to C# IAiChatService interface. I'm using protocols to keep it closer to my C# based interface approach
     """
     
     async def complete_chat_streaming_async(

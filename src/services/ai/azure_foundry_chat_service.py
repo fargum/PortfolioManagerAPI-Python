@@ -54,9 +54,6 @@ class AzureFoundryChatService:
             logger.info(f"Starting streaming chat completion with {len(messages)} messages using model {self.model_name}")
             
             # Stream the response from Azure
-            # Note: Model is NOT passed here because it's already in the endpoint URL
-            # Azure OpenAI endpoint format: https://{resource}.openai.azure.com/openai/deployments/{model-name}
-            # GPT-5 mini has limited parameter support - using defaults
             response = self.client.complete(
                 messages=azure_messages,
                 stream=True

@@ -2,6 +2,10 @@
 
 Python FastAPI implementation of the Portfolio Manager API. This project recreates the C# Portfolio Manager API using Python, FastAPI, SQLAlchemy, and LangChain/LangGraph for AI functionality.
 
+I decided to build this because I wanted to see how a python based agentic application (powered with langchain, langgraph) would compare with my earlier .net/c# solution which uses Microsoft Agent Framework (built on Semantic Kernel and Autogen).
+
+This solution does not implement the full feature set of the earlier one, nor does it adopt the full DDD approach. The aim here was simplicity.
+
 ## Features
 
 - **FastAPI** - Modern, fast web framework with automatic OpenAPI documentation
