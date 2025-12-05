@@ -10,7 +10,7 @@ from src.db.models.holding import Holding
 from src.db.models.instrument import Instrument
 from src.db.models.portfolio import Portfolio
 from src.db.models.platform import Platform
-from src.schemas.holding import AddHoldingApiRequest
+from src.schemas.holding import AddHoldingApiRequest, PortfolioHoldingDto, AccountHoldingsResponse
 from src.services.result_objects import (
     AddHoldingResult,
     UpdateHoldingResult,
@@ -39,9 +39,9 @@ class HoldingService:
         self,
         account_id: int,
         valuation_date: date
-    ) -> Optional[List[dict]]:
+    ) -> Optional[AccountHoldingsResponse]:
         """
-        Get holdings for an account on a specific date.
+        Get holdings for an account on a specific date with aggregated totals.
         Supports both historical data retrieval and real-time pricing for current date.
         
         Args:
@@ -49,7 +49,7 @@ class HoldingService:
             valuation_date: Date to retrieve holdings for
             
         Returns:
-            List of holdings with instrument/platform/portfolio details, or None if not found
+            AccountHoldingsResponse with holdings list and aggregated totals, or None if not found
         """
         logger.info(f"Retrieving holdings for account {account_id} on date {valuation_date}")
         
@@ -124,7 +124,11 @@ class HoldingService:
             # Use historical data as-is
             holdings_with_details = self._build_holdings_response(holdings_rows, valuation_date)
         
-        return holdings_with_details if holdings_with_details else None
+        if not holdings_with_details:
+            return None
+        
+        # Convert to DTOs and calculate aggregated totals
+        return self._build_account_holdings_response(account_id, valuation_date, holdings_with_details)
     
     def _build_holdings_response(
         self, 
@@ -163,6 +167,37 @@ class HoldingService:
             })
         
         return holdings_with_details
+    
+    def _build_account_holdings_response(
+        self,
+        account_id: int,
+        valuation_date: date,
+        holdings_list: List[dict]
+    ) -> AccountHoldingsResponse:
+        """Build AccountHoldingsResponse with aggregated totals."""
+        # Convert to DTOs
+        holding_dtos = [PortfolioHoldingDto(**h) for h in holdings_list]
+        
+        # Calculate aggregated totals
+        total_current_value = sum(h.current_value for h in holding_dtos)
+        total_bought_value = sum(h.bought_value for h in holding_dtos)
+        total_gain_loss = total_current_value - total_bought_value
+        total_gain_loss_percentage = (
+            (total_gain_loss / total_bought_value * 100) 
+            if total_bought_value > 0 
+            else Decimal('0')
+        )
+        
+        return AccountHoldingsResponse(
+            account_id=account_id,
+            valuation_date=valuation_date,
+            holdings=holding_dtos,
+            total_holdings=len(holding_dtos),
+            total_current_value=total_current_value,
+            total_bought_value=total_bought_value,
+            total_gain_loss=total_gain_loss,
+            total_gain_loss_percentage=total_gain_loss_percentage
+        )
     
     async def _apply_real_time_pricing(
         self, 

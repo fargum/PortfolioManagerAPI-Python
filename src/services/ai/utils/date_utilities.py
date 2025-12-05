@@ -47,7 +47,9 @@ class DateUtilities:
                 return (datetime.now() + timedelta(days=1)).date()
             
             # Try parsing with dateutil (handles many formats)
-            parsed = parser.parse(date_string, dayfirst=True)
+            # Note: dayfirst=False for ISO format (YYYY-MM-DD) compatibility
+            # ISO format should be preferred, but this handles DD/MM/YYYY too
+            parsed = parser.parse(date_string, dayfirst=False)
             return parsed.date()
             
         except Exception as e:

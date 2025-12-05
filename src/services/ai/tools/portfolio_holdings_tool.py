@@ -52,20 +52,27 @@ async def get_portfolio_holdings(
         
         logger.info(f"Getting portfolio holdings for account {_account_id} on {parsed_date}")
         
-        # Get holdings from service
-        holdings = await _holding_service.get_holdings_by_account_and_date_async(
+        # Get holdings with aggregated totals from service
+        response = await _holding_service.get_holdings_by_account_and_date_async(
             _account_id, parsed_date
         )
         
-        # Convert dict response to DTO objects
-        holdings_dtos = [PortfolioHoldingDto(**h) for h in holdings]
-        total_value = sum(h.current_value for h in holdings_dtos)
+        if not response:
+            return {
+                "Error": "No holdings found for the specified date",
+                "AccountId": _account_id,
+                "Date": effective_date
+            }
         
-        # Format response
+        # Format response using service-calculated totals
         return {
-            "AccountId": _account_id,
+            "AccountId": response.account_id,
             "Date": effective_date,
-            "TotalValue": float(total_value),
+            "TotalValue": float(response.total_current_value),
+            "TotalBoughtValue": float(response.total_bought_value),
+            "TotalGainLoss": float(response.total_gain_loss),
+            "TotalGainLossPercentage": float(response.total_gain_loss_percentage),
+            "TotalHoldings": response.total_holdings,
             "Holdings": [
                 {
                     "Ticker": h.ticker,
@@ -79,7 +86,7 @@ async def get_portfolio_holdings(
                     "GainLoss": float(h.gain_loss),
                     "GainLossPercentage": float(h.gain_loss_percentage),
                 }
-                for h in holdings_dtos
+                for h in response.holdings
             ]
         }
         

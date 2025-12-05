@@ -106,41 +106,19 @@ async def get_holdings_by_date(
                 detail="Invalid date format. Date must be in YYYY-MM-DD format"
             )
         
-        # Get holdings
-        holdings = await service.get_holdings_by_account_and_date_async(account_id, date_only)
+        # Get holdings with aggregated totals from service
+        response = await service.get_holdings_by_account_and_date_async(account_id, date_only)
         
-        if not holdings:
+        if not response:
             logger.info(f"No holdings found for account {account_id} on date {date_only}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No holdings found for account {account_id} on date {date_only}"
             )
         
-        logger.info(f"Found {len(holdings)} holdings for account {account_id}")
+        logger.info(f"Found {response.total_holdings} holdings for account {account_id}")
         
-        # Convert to PortfolioHoldingDto objects
-        holding_dtos = [PortfolioHoldingDto(**h) for h in holdings]
-        
-        # Calculate totals
-        total_current_value = sum(h.current_value for h in holding_dtos)
-        total_bought_value = sum(h.bought_value for h in holding_dtos)
-        total_gain_loss = total_current_value - total_bought_value
-        total_gain_loss_percentage = (
-            (total_gain_loss / total_bought_value * 100) 
-            if total_bought_value > 0 
-            else 0
-        )
-        
-        return AccountHoldingsResponse(
-            account_id=account_id,
-            valuation_date=date_only,
-            holdings=holding_dtos,
-            total_holdings=len(holding_dtos),
-            total_current_value=total_current_value,
-            total_bought_value=total_bought_value,
-            total_gain_loss=total_gain_loss,
-            total_gain_loss_percentage=total_gain_loss_percentage
-        )
+        return response
     except HTTPException:
         raise
     except Exception as e:

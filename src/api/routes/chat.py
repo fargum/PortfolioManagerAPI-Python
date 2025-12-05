@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.core.ai_config import AIConfig
-from src.db.session import get_db_async
+from src.db.session import get_db
 from src.services.holding_service import HoldingService
 from src.services.ai.agent_prompt_service import AgentPromptService
 from src.services.ai.langgraph_agent_service import LangGraphAgentService
@@ -88,7 +88,7 @@ async def health_check(ai_config: AIConfig = Depends(get_ai_config)):
 async def stream_chat(
     request: ChatRequest,
     agent_service: LangGraphAgentService = Depends(get_agent_service),
-    db = Depends(get_db_async)
+    db = Depends(get_db)
 ):
     """
     Stream AI chat response for user query with LangGraph agent and tool calling.

@@ -53,21 +53,18 @@ class PortfolioAnalysisService:
         try:
             logger.info(f"Analyzing portfolio performance for account {account_id} on {analysis_date}")
             
-            # Get current holdings
-            holdings = await self.holding_service.get_holdings_by_account_and_date_async(
+            # Get holdings with aggregated totals from service
+            response = await self.holding_service.get_holdings_by_account_and_date_async(
                 account_id, analysis_date.date()
             )
             
-            # Convert dict response to DTO objects
-            holdings_dtos = [PortfolioHoldingDto(**h) for h in holdings]
-            
-            if not holdings_dtos:
+            if not response or not response.holdings:
                 logger.warning(f"No holdings found for account {account_id} on {analysis_date}")
                 return self._create_empty_analysis(account_id, analysis_date)
             
             # Convert holdings to performance DTOs
             holding_performance = []
-            for h in holdings_dtos:
+            for h in response.holdings:
                 holding_performance.append({
                     "Ticker": h.ticker,
                     "InstrumentName": h.instrument_name,
@@ -80,10 +77,10 @@ class PortfolioAnalysisService:
                     "TotalReturnPercentage": float((h.current_value - h.bought_value) / h.bought_value) if h.bought_value > 0 else 0.0
                 })
             
-            # Calculate portfolio totals
-            total_value = sum(h["CurrentValue"] for h in holding_performance)
-            total_gain_loss = sum(h["GainLoss"] for h in holding_performance)
-            total_gain_loss_percentage = (total_gain_loss / (total_value - total_gain_loss)) if (total_value - total_gain_loss) > 0 else 0.0
+            # Use service-calculated totals instead of recalculating
+            total_value = float(response.total_current_value)
+            total_gain_loss = float(response.total_gain_loss)
+            total_gain_loss_percentage = float(response.total_gain_loss_percentage)
             
             # Generate performance metrics
             metrics = self._calculate_performance_metrics(holding_performance)
@@ -134,17 +131,16 @@ class PortfolioAnalysisService:
                 f"between {start_date} and {end_date}"
             )
             
-            # Get holdings for both dates
-            start_holdings_data = await self.holding_service.get_holdings_by_account_and_date_async(
+            # Get holdings with aggregated totals from service
+            start_response = await self.holding_service.get_holdings_by_account_and_date_async(
                 account_id, start_date.date()
             )
-            end_holdings_data = await self.holding_service.get_holdings_by_account_and_date_async(
+            end_response = await self.holding_service.get_holdings_by_account_and_date_async(
                 account_id, end_date.date()
             )
             
-            # Convert to DTOs
-            start_holdings = [PortfolioHoldingDto(**h) for h in start_holdings_data] if start_holdings_data else []
-            end_holdings = [PortfolioHoldingDto(**h) for h in end_holdings_data] if end_holdings_data else []
+            start_holdings = start_response.holdings if start_response else []
+            end_holdings = end_response.holdings if end_response else []
             
             if not start_holdings and not end_holdings:
                 logger.warning(
@@ -162,9 +158,9 @@ class PortfolioAnalysisService:
                     "Insights": self._generate_comparison_insights([], 0.0)
                 }
             
-            # Calculate totals
-            start_value = sum(h.current_value for h in start_holdings)
-            end_value = sum(h.current_value for h in end_holdings)
+            # Use service-calculated totals
+            start_value = float(start_response.total_current_value) if start_response else 0.0
+            end_value = float(end_response.total_current_value) if end_response else 0.0
             total_change = end_value - start_value
             total_change_percentage = float(total_change / start_value) if start_value > 0 else 0.0
             
