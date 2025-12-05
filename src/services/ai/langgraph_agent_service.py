@@ -6,7 +6,7 @@ import logging
 from typing import AsyncIterator
 
 from langchain_openai import AzureChatOpenAI
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_react_agent
 from langchain_core.messages import HumanMessage, AIMessage
 
 from src.core.ai_config import AIConfig
