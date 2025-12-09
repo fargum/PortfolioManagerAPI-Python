@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.core.ai_config import AIConfig
+from src.core.config import Settings
 from src.db.session import get_db
 from src.services.holding_service import HoldingService
 from src.services.ai.agent_prompt_service import AgentPromptService
@@ -48,19 +49,34 @@ def get_prompt_service() -> AgentPromptService:
 
 
 @lru_cache()
+def get_settings() -> Settings:
+    """Get application settings (singleton)."""
+    return Settings()
+
+
+@lru_cache()
 def get_agent_service() -> LangGraphAgentService:
     """
-    Get configured LangGraph agent service (singleton).
+    Get configured LangGraph agent service with conversation memory (singleton).
     
-    Database session is passed per request when calling stream_chat/chat methods.
+    Database session is passed per request when calling stream_chat methods.
     """
-    ai_config = get_ai_config()
-    prompt_service = get_prompt_service()
-    
-    return LangGraphAgentService(
-        ai_config=ai_config,
-        agent_prompt_service=prompt_service
-    )
+    try:
+        ai_config = get_ai_config()
+        prompt_service = get_prompt_service()
+        settings = get_settings()
+        
+        logger.info("Initializing LangGraph agent service...")
+        agent_service = LangGraphAgentService(
+            ai_config=ai_config,
+            agent_prompt_service=prompt_service,
+            settings=settings
+        )
+        logger.info("LangGraph agent service initialized successfully")
+        return agent_service
+    except Exception as e:
+        logger.error(f"Failed to initialize agent service: {e}", exc_info=True)
+        raise
 
 
 # Routes
@@ -122,14 +138,15 @@ async def stream_chat(
             f"query: {request.query[:50]}..."
         )
         
-        # Stream response using LangGraph agent
+        # Stream response using LangGraph agent with conversation memory
         async def generate() -> AsyncIterator[str]:
             """Generate streaming response."""
             try:
                 async for token in agent_service.stream_chat(
                     user_message=request.query,
                     account_id=request.account_id,  # Injected from auth context, not from AI
-                    db=db  # Database session for this request
+                    db=db,  # Database session for this request
+                    thread_id=request.thread_id  # Optional thread ID for conversation continuity
                 ):
                     # Send token as Server-Sent Event
                     yield f"data: {token}\n\n"

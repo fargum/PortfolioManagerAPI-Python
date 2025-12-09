@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     )
     
     # Database
-    database_url: str = "postgresql://postgres:postgres@localhost:5432/portfoliomanager"
+    database_url: str  # Required - no default (must be set in .env)
     database_pool_size: int = 5
     database_max_overflow: int = 10
     
@@ -35,9 +35,9 @@ class Settings(BaseSettings):
     eod_api_timeout_seconds: int = 30
     
     # Azure AI Foundry Configuration 
-    azure_foundry_endpoint: str = ""
-    azure_foundry_api_key: str = ""
-    azure_foundry_model_name: str = "gpt-5-mini"
+    azure_foundry_endpoint: str  # Required - no default (must be set in .env)
+    azure_foundry_api_key: str  # Required - no default (must be set in .env)
+    azure_foundry_model_name: str = "gpt-4o-mini"
     azure_foundry_api_version: str = "2024-08-01-preview"
     
     @property

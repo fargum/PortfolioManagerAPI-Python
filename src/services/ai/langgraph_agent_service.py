@@ -1,18 +1,24 @@
 """
 LangGraph agent service for portfolio chat with tool calling.
-Uses create_react_agent for stateful workflows with Azure OpenAI.
+Uses LangGraph's StateGraph for explicit graph construction with memory persistence.
+Leverages PostgresSaver checkpointer for conversation state management.
 """
 import logging
-from typing import AsyncIterator
+from typing import AsyncIterator, Optional, Literal
+from typing_extensions import TypedDict
 
 from langchain_openai import AzureChatOpenAI
-from langchain.agents import create_react_agent
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, ToolMessage
+from langgraph.graph import StateGraph, MessagesState, START, END
+from langgraph.prebuilt import ToolNode
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from src.core.ai_config import AIConfig
 from src.services.ai.agent_prompt_service import AgentPromptService
 from src.services.holding_service import HoldingService
 from src.services.ai.portfolio_analysis_service import PortfolioAnalysisService
+from src.services.conversation_thread_service import ConversationThreadService
+from src.core.config import Settings
 
 # Import LangChain tools
 from src.services.ai.tools.portfolio_holdings_tool import (
@@ -35,17 +41,28 @@ from src.services.ai.tools.market_intelligence_tool import (
 logger = logging.getLogger(__name__)
 
 
+class AgentState(MessagesState):
+    """
+    Custom state for the portfolio agent.
+    Extends MessagesState with additional portfolio context.
+    """
+    account_id: int  # Account context for security
+    thread_id: int   # Conversation thread ID
+
+
 class LangGraphAgentService:
     """
     Portfolio chat agent using LangGraph's create_react_agent.
-    Provides stateful agentic workflows with tool calling.
+    Provides stateful agentic workflows with tool calling and conversation memory.
+    Uses PostgresSaver checkpointer for persistent conversation history.
     Singleton service that accepts database session per request.
     """
     
     def __init__(
         self,
         ai_config: AIConfig,
-        agent_prompt_service: AgentPromptService
+        agent_prompt_service: AgentPromptService,
+        settings: Settings
     ):
         """
         Initialize the LangGraph agent service.
@@ -53,9 +70,11 @@ class LangGraphAgentService:
         Args:
             ai_config: AI configuration with Azure OpenAI settings
             agent_prompt_service: Service for system prompts
+            settings: Application settings with database connection string
         """
         self.ai_config = ai_config
         self.agent_prompt_service = agent_prompt_service
+        self.settings = settings
         
         # Initialize Azure OpenAI model
         self.model = AzureChatOpenAI(
@@ -66,9 +85,27 @@ class LangGraphAgentService:
             streaming=True
         )
         
-        logger.info(
-            f"Initialized LangGraph agent with model: {ai_config.azure_openai_deployment_name}"
-        )
+        # Initialize AsyncPostgresSaver checkpointer for conversation memory
+        # AsyncPostgresSaver expects standard psycopg connection string 
+        # Tables must already exist in public schema (checkpoints, checkpoint_writes, checkpoint_blobs)
+        try:
+            # Convert SQLAlchemy async URL back to standard postgres URL for psycopg
+            # AsyncPostgresSaver uses psycopg3 which handles async natively
+            postgres_url = settings.database_url  # Use standard postgresql:// format
+            
+            # Store connection string for creating checkpointer instances
+            self.postgres_url = postgres_url
+            self.checkpointer = None  # Will be created per request
+            
+            logger.info(
+                f"Initialized LangGraph agent with model: {ai_config.azure_openai_deployment_name} and PostgreSQL async memory"
+            )
+        except Exception as e:
+            logger.error(f"Failed to initialize PostgreSQL checkpointer: {e}", exc_info=True)
+            raise RuntimeError(
+                f"Cannot initialize conversation memory: {e}. "
+                f"Check database connection and permissions."
+            ) from e
     
     def _initialize_tools_for_account(
         self,
@@ -91,53 +128,137 @@ class LangGraphAgentService:
         
         logger.info(f"Tools initialized for account {account_id}")
     
-    def _create_agent(self, account_id: int):
-        """
-        Create a LangGraph agent with portfolio tools.
-        
-        Args:
-            account_id: Account ID for prompt context
-        
-        Returns:
-            LangGraph agent with tool calling capabilities
-        """
-        # Portfolio tools list
-        tools = [
+    def _get_portfolio_tools(self):
+        """Get list of portfolio tools for the agent."""
+        return [
             get_portfolio_holdings,
             analyze_portfolio_performance,
             compare_portfolio_performance,
             get_market_context,
             get_market_sentiment
         ]
+    
+    def _create_agent_node(self, model_with_tools, system_prompt: str):
+        """
+        Create the agent node function.
         
-        # Get system prompt with account context
-        system_prompt = self.agent_prompt_service.get_portfolio_advisor_prompt(account_id)
+        Args:
+            model_with_tools: LLM with tools bound
+            system_prompt: System prompt for the agent
+            
+        Returns:
+            Function that processes agent state
+        """
+        def call_model(state: AgentState) -> AgentState:
+            messages = state["messages"]
+            # Inject system prompt on first message
+            if not any(isinstance(m, (AIMessage, ToolMessage)) for m in messages):
+                messages = [{"role": "system", "content": system_prompt}] + messages
+            response = model_with_tools.invoke(messages)
+            return {"messages": [response]}
         
-        # Create agent with tools and system prompt
-        agent = create_react_agent(
-            model=self.model,
-            tools=tools,
-            prompt=system_prompt
+        return call_model
+    
+    def _create_routing_function(self):
+        """
+        Create routing function to determine next step (tools or end).
+        
+        Returns:
+            Function that determines routing based on state
+        """
+        def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
+            messages = state["messages"]
+            last_message = messages[-1]
+            if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+                return "tools"
+            return "__end__"
+        
+        return should_continue
+    
+    def _build_graph(self, tools: list, system_prompt: str):
+        """
+        Build the LangGraph StateGraph with nodes and edges.
+        
+        Args:
+            tools: List of portfolio tools
+            system_prompt: System prompt for the agent
+            
+        Returns:
+            Compiled StateGraph workflow
+        """
+        workflow = StateGraph(AgentState)
+        
+        # Bind tools to model
+        model_with_tools = self.model.bind_tools(tools)
+        
+        # Create node functions
+        call_model = self._create_agent_node(model_with_tools, system_prompt)
+        should_continue = self._create_routing_function()
+        
+        # Build graph structure
+        workflow.add_node("agent", call_model)
+        workflow.add_node("tools", ToolNode(tools))
+        workflow.add_edge(START, "agent")
+        workflow.add_conditional_edges(
+            "agent", 
+            should_continue, 
+            {"tools": "tools", "__end__": END}
         )
+        workflow.add_edge("tools", "agent")
         
-        return agent
+        return workflow
+    
+    async def _stream_graph_events(
+        self,
+        graph,
+        initial_state: dict,
+        config: dict
+    ) -> AsyncIterator[str]:
+        """
+        Stream events from the compiled graph.
+        
+        Args:
+            graph: Compiled LangGraph
+            initial_state: Initial state with messages
+            config: Configuration with thread_id
+            
+        Yields:
+            Content chunks from the model
+        """
+        async for event in graph.astream_events(
+            initial_state,
+            config=config,
+            version="v2"
+        ):
+            # Stream token events from the model
+            if event["event"] == "on_chat_model_stream":
+                chunk = event["data"]["chunk"]
+                if hasattr(chunk, "content") and chunk.content:
+                    yield chunk.content
+            
+            # Log tool calls
+            elif event["event"] == "on_tool_start":
+                logger.info(f"Tool called: {event['name']}")
+            
+            elif event["event"] == "on_tool_end":
+                logger.info(f"Tool completed: {event['name']}")
     
     async def stream_chat(
         self,
         user_message: str,
         account_id: int,
         db,
-        conversation_history: list = None
+        thread_id: Optional[int] = None
     ) -> AsyncIterator[str]:
         """
-        Stream chat response with tool calling.
-        Uses LangGraph agent for stateful workflows.
+        Stream chat response with tool calling and conversation memory.
+        Uses LangGraph agent with AsyncPostgresSaver for persistent conversation history.
         
         Args:
             user_message: User's message
             account_id: Authenticated user's account ID (injected from request)
             db: Database session for this request
-            conversation_history: Optional conversation history
+            thread_id: Optional conversation thread ID (None creates/uses active thread)
         
         Yields:
             Chunks of the AI response
@@ -146,6 +267,7 @@ class LangGraphAgentService:
             # Create services with database session
             holding_service = HoldingService(db)
             portfolio_analysis_service = PortfolioAnalysisService(holding_service)
+            conversation_thread_service = ConversationThreadService(db)
             
             # Initialize tools with account context
             self._initialize_tools_for_account(
@@ -154,104 +276,44 @@ class LangGraphAgentService:
                 portfolio_analysis_service
             )
             
-            # Create agent
-            agent = self._create_agent(account_id)
+            # Get or create conversation thread
+            thread = await conversation_thread_service.get_or_create_active_thread(
+                account_id=account_id,
+                thread_id=thread_id
+            )
             
-            # Build message history
-            messages = []
-            if conversation_history:
-                for msg in conversation_history:
-                    if msg.get("role") == "user":
-                        messages.append(HumanMessage(content=msg["content"]))
-                    elif msg.get("role") == "assistant":
-                        messages.append(AIMessage(content=msg["content"]))
+            logger.info(f"Using conversation thread {thread.id} for account {account_id}")
             
-            # Add current user message
-            messages.append(HumanMessage(content=user_message))
+            # Build graph components
+            tools = self._get_portfolio_tools()
+            system_prompt = self.agent_prompt_service.get_portfolio_advisor_prompt(account_id)
+            workflow = self._build_graph(tools, system_prompt)
             
-            logger.info(f"Streaming chat for account {account_id}: {user_message[:100]}")
-            
-            # Stream agent response
-            async for event in agent.astream_events(
-                {"messages": messages},
-                version="v1"
-            ):
-                # Stream token events from the model
-                if event["event"] == "on_chat_model_stream":
-                    chunk = event["data"]["chunk"]
-                    if hasattr(chunk, "content") and chunk.content:
-                        yield chunk.content
+            # Create and use async checkpointer
+            async with AsyncPostgresSaver.from_conn_string(self.postgres_url) as checkpointer:
+                graph = workflow.compile(checkpointer=checkpointer)
                 
-                # Log tool calls
-                elif event["event"] == "on_tool_start":
-                    tool_name = event["name"]
-                    logger.info(f"Tool called: {tool_name}")
+                # Prepare state and config
+                initial_state = {
+                    "messages": [HumanMessage(content=user_message)],
+                    "account_id": account_id,
+                    "thread_id": thread.id
+                }
                 
-                elif event["event"] == "on_tool_end":
-                    tool_name = event["name"]
-                    logger.info(f"Tool completed: {tool_name}")
+                config = {
+                    "configurable": {
+                        "thread_id": f"account_{account_id}_thread_{thread.id}"
+                    }
+                }
+                
+                logger.info(
+                    f"Streaming chat for account {account_id} on thread {thread.id}: {user_message[:100]}"
+                )
+                
+                # Stream agent response with memory
+                async for chunk in self._stream_graph_events(graph, initial_state, config):
+                    yield chunk
         
         except Exception as e:
             logger.error(f"Error in stream_chat: {str(e)}", exc_info=True)
-            error_message = f"I apologize, but I encountered an error: {str(e)}"
-            yield error_message
-    
-    async def chat(
-        self,
-        user_message: str,
-        account_id: int,
-        db,
-        conversation_history: list = None
-    ) -> str:
-        """
-        Non-streaming chat response with tool calling.
-        
-        Args:
-            user_message: User's message
-            account_id: Authenticated user's account ID (injected from request)
-            db: Database session for this request
-            conversation_history: Optional conversation history
-        
-        Returns:
-            Complete AI response
-        """
-        try:
-            # Create services with database session
-            holding_service = HoldingService(db)
-            portfolio_analysis_service = PortfolioAnalysisService(holding_service)
-            
-            # Initialize tools with account context
-            self._initialize_tools_for_account(
-                account_id,
-                holding_service,
-                portfolio_analysis_service
-            )
-            
-            # Create agent
-            agent = self._create_agent(account_id)
-            
-            # Build message history
-            messages = []
-            if conversation_history:
-                for msg in conversation_history:
-                    if msg.get("role") == "user":
-                        messages.append(HumanMessage(content=msg["content"]))
-                    elif msg.get("role") == "assistant":
-                        messages.append(AIMessage(content=msg["content"]))
-            
-            # Add current user message
-            messages.append(HumanMessage(content=user_message))
-            
-            logger.info(f"Chat for account {account_id}: {user_message[:100]}")
-            
-            # Invoke agent
-            response = await agent.ainvoke({"messages": messages})
-            
-            # Extract final message
-            final_message = response["messages"][-1].content
-            
-            return final_message
-        
-        except Exception as e:
-            logger.error(f"Error in chat: {str(e)}", exc_info=True)
-            return f"I apologize, but I encountered an error: {str(e)}"
+            yield f"I apologize, but I encountered an error: {str(e)}"

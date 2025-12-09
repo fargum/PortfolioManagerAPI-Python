@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 class PortfolioAnalysisService:
     """
     Implementation of portfolio analysis service for AI-powered insights.
-    Matches C# IPortfolioAnalysisService functionality.
     """
     
     def __init__(self, holding_service: HoldingService):

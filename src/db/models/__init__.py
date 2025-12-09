@@ -5,6 +5,7 @@ from src.db.models.instrument import Instrument
 from src.db.models.platform import Platform
 from src.db.models.portfolio import Portfolio
 from src.db.models.exchange_rate import ExchangeRate
+from src.db.models.conversation_thread import ConversationThread, ChatMessage
 
 __all__ = [
     "Account",
@@ -13,4 +14,6 @@ __all__ = [
     "Platform",
     "Portfolio",
     "ExchangeRate",
+    "ConversationThread",
+    "ChatMessage",
 ]
