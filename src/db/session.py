@@ -48,7 +48,9 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     Usage in FastAPI:
         @app.get("/endpoint")
         async def endpoint(db: AsyncSession = Depends(get_db)):
-            ...
+            # Use db session here
+            result = await db.execute(select(Model))
+            return result.scalars().all()
     """
     async with AsyncSessionLocal() as session:
         try:

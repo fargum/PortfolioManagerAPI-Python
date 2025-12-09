@@ -83,7 +83,64 @@ API_PORT=8000
 DEBUG=true
 ```
 
-### 5. Run the API
+### 5. Configure AI Features (Optional)
+
+The Portfolio Manager API includes AI-powered portfolio analysis using Azure AI Foundry (Azure OpenAI). AI features are **optional** and the API will run without them, but they enable:
+
+- Natural language portfolio queries
+- LangGraph-based agent with tool calling
+- Conversation memory with multi-turn interactions
+- Intelligent portfolio analysis and insights
+
+#### Azure AI Foundry Setup
+
+1. **Create Azure AI Resource**:
+   - Go to [Azure AI Foundry](https://ai.azure.com)
+   - Create a new project or use existing one
+   - Deploy a chat model (e.g., `gpt-4o-mini`, `gpt-4o`, `gpt-4`)
+
+2. **Get Configuration Values**:
+   - **Endpoint**: Your Azure OpenAI endpoint (e.g., `https://your-resource.openai.azure.com/`)
+   - **API Key**: From Azure portal under Keys and Endpoint
+   - **Deployment Name**: The name you gave your model deployment
+   - **API Version**: Use `2024-08-01-preview` (or latest)
+
+3. **Update `.env`**:
+   ```env
+   AZURE_FOUNDRY_ENDPOINT=https://your-resource.openai.azure.com/
+   AZURE_FOUNDRY_API_KEY=your-api-key-here
+   AZURE_FOUNDRY_MODEL_NAME=gpt-4o-mini
+   AZURE_FOUNDRY_API_VERSION=2024-08-01-preview
+   ```
+
+4. **Database Setup for Memory**:
+   The AI agent uses PostgreSQL to store conversation state. Run the migration scripts:
+   ```sql
+   -- Run migrations in order from migrations/ folder
+   \i migrations/001_langgraph_checkpointer_tables.sql
+   \i migrations/002_checkpoint_blobs_table.sql
+   \i migrations/003_add_blob_to_checkpoint_writes.sql
+   \i migrations/004_add_task_path_to_checkpoint_writes.sql
+   ```
+
+#### Verify AI Setup
+
+```bash
+curl http://localhost:8000/api/ai/chat/health
+```
+
+Expected response:
+```json
+{
+  "status": "healthy",
+  "azure_configured": true,
+  "model_name": "gpt-4o-mini"
+}
+```
+
+If `azure_configured` is `false`, AI features are disabled and the API will return configuration errors when accessing AI endpoints.
+
+### 6. Run the API
 
 ```powershell
 python -m src.api.main

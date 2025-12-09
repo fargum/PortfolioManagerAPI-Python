@@ -114,8 +114,8 @@ class CurrencyConversionService:
             try:
                 await self.db.rollback()
                 logger.info("Rolled back failed transaction")
-            except:
-                pass
+            except Exception as rollback_ex:
+                logger.warning(f"Failed to rollback transaction: {rollback_ex}")
             # Re-raise the exception instead of silently returning unconverted amount
             # This ensures errors are visible and don't get swallowed
             raise
