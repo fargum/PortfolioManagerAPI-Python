@@ -88,6 +88,30 @@ class AgentPromptService:
                 for example in tool_guidance.get("WhenNotToUseTools", []):
                     prompt_parts.append(f'- "{example}"')
                 prompt_parts.append("")
+                
+                # Tool combinations
+                tool_combos = tool_guidance.get("ToolCombinations", [])
+                if tool_combos:
+                    prompt_parts.append("TOOL COMBINATIONS:")
+                    for combo in tool_combos:
+                        prompt_parts.append(combo)
+                    prompt_parts.append("")
+                
+                # Available tools
+                available_tools = tool_guidance.get("AvailableTools", [])
+                if available_tools:
+                    prompt_parts.append("YOUR AVAILABLE TOOLS:")
+                    for tool in available_tools:
+                        prompt_parts.append(f"- {tool}")
+                    prompt_parts.append("")
+                
+                # News and sentiment guidance
+                news_guidance = tool_guidance.get("NewsAndSentimentGuidance", [])
+                if news_guidance:
+                    prompt_parts.append("CRITICAL - NEWS AND SENTIMENT TOOLS:")
+                    for guidance in news_guidance:
+                        prompt_parts.append(guidance)
+                    prompt_parts.append("")
             
             # Communication style
             comm_style = advisor_config.get("CommunicationStyle", {})

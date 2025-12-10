@@ -142,6 +142,8 @@ If `azure_configured` is `false`, AI features are disabled and the API will retu
 
 ### 6. Run the API
 
+#### Option A: Local Development
+
 ```powershell
 python -m src.api.main
 ```
@@ -155,6 +157,63 @@ The API will be available at:
 - **API**: http://localhost:8000
 - **Interactive Docs (Swagger)**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
+
+#### Option B: Docker Deployment
+
+**Note**: Docker deployment is recommended for testing on Windows as it avoids the `psycopg3` ProactorEventLoop limitation that affects the conversation memory feature.
+
+1. **Configure Environment**:
+   ```powershell
+   copy .env.docker .env
+   # Edit .env with your Azure AI Foundry and EOD API credentials
+   ```
+
+2. **Build and Run**:
+   ```powershell
+   docker-compose up -d
+   ```
+
+3. **Run Database Migrations**:
+   ```powershell
+   docker-compose exec api python -c "
+   import asyncio
+   from sqlalchemy import text
+   from src.db.session import AsyncSessionLocal
+   
+   async def run_migrations():
+       async with AsyncSessionLocal() as session:
+           # Add migration SQL here if needed
+           pass
+   
+   asyncio.run(run_migrations())
+   "
+   ```
+
+   Or connect to PostgreSQL directly:
+   ```powershell
+   docker-compose exec postgres psql -U portfoliouser -d portfoliomanager
+   ```
+
+4. **View Logs**:
+   ```powershell
+   docker-compose logs -f api
+   ```
+
+5. **Stop Services**:
+   ```powershell
+   docker-compose down
+   ```
+
+**Development Mode** (with hot reload):
+```powershell
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+
+The API will be available at:
+- **API**: http://localhost:8000
+- **Interactive Docs (Swagger)**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **PostgreSQL**: localhost:5432
 
 ## API Endpoints
 

@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  # Python FastAPI Application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: portfolio-api-python
+    environment:
+      # Database - connects to external PostgreSQL
+      DATABASE_URL: ${DATABASE_URL}
+      
+      # Azure AI Foundry
+      AZURE_FOUNDRY_ENDPOINT: ${AZURE_FOUNDRY_ENDPOINT}
+      AZURE_FOUNDRY_API_KEY: ${AZURE_FOUNDRY_API_KEY}
+      AZURE_FOUNDRY_MODEL_NAME: ${AZURE_FOUNDRY_MODEL_NAME:-gpt-4o-mini}
+      AZURE_FOUNDRY_API_VERSION: ${AZURE_FOUNDRY_API_VERSION:-2024-05-01-preview}
+      
+      # EOD Historical Data
+      EOD_API_TOKEN: ${EOD_API_TOKEN}
+      EOD_API_BASE_URL: ${EOD_API_BASE_URL:-https://eodhd.com/api}
+      
+      # Application
+      DEBUG: ${DEBUG:-False}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000","http://localhost:8080"]}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=2)"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped

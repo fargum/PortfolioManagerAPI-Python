@@ -18,6 +18,9 @@ from src.services.ai.agent_prompt_service import AgentPromptService
 from src.services.holding_service import HoldingService
 from src.services.ai.portfolio_analysis_service import PortfolioAnalysisService
 from src.services.conversation_thread_service import ConversationThreadService
+from src.services.eod_market_data_tool import EodMarketDataTool
+from src.services.pricing_calculation_service import PricingCalculationService
+from src.services.currency_conversion_service import CurrencyConversionService
 from src.core.config import Settings
 
 # Import LangChain tools
@@ -35,7 +38,12 @@ from src.services.ai.tools.portfolio_comparison_tool import (
 )
 from src.services.ai.tools.market_intelligence_tool import (
     get_market_context,
-    get_market_sentiment
+    get_market_sentiment,
+    initialize_market_intelligence_tool
+)
+from src.services.ai.tools.real_time_prices_tool import (
+    get_real_time_prices,
+    initialize_real_time_prices_tool
 )
 
 logger = logging.getLogger(__name__)
@@ -126,6 +134,14 @@ class LangGraphAgentService:
         initialize_analysis_tool(portfolio_analysis_service, account_id)
         initialize_comparison_tool(portfolio_analysis_service, account_id)
         
+        # Initialize real-time prices and market intelligence tools with EOD market data tool
+        if holding_service.eod_tool:
+            initialize_real_time_prices_tool(holding_service.eod_tool)
+            initialize_market_intelligence_tool(holding_service.eod_tool)
+            logger.info(f"Real-time prices and market intelligence tools initialized for account {account_id}")
+        else:
+            logger.warning(f"EOD tool not available for account {account_id}, real-time prices and market intelligence tools not initialized")
+        
         logger.info(f"Tools initialized for account {account_id}")
     
     def _get_portfolio_tools(self):
@@ -135,7 +151,8 @@ class LangGraphAgentService:
             analyze_portfolio_performance,
             compare_portfolio_performance,
             get_market_context,
-            get_market_sentiment
+            get_market_sentiment,
+            get_real_time_prices
         ]
     
     def _create_agent_node(self, model_with_tools, system_prompt: str):
@@ -155,6 +172,13 @@ class LangGraphAgentService:
             if not any(isinstance(m, (AIMessage, ToolMessage)) for m in messages):
                 messages = [{"role": "system", "content": system_prompt}] + messages
             response = model_with_tools.invoke(messages)
+            
+            # Log what the AI decided to do
+            if hasattr(response, "tool_calls") and response.tool_calls:
+                logger.info(f"🤖 AI decided to call {len(response.tool_calls)} tool(s): {[tc['name'] for tc in response.tool_calls]}")
+            else:
+                logger.info(f"🤖 AI responded without calling tools (message length: {len(response.content) if hasattr(response, 'content') else 0})")
+            
             return {"messages": [response]}
         
         return call_model
@@ -187,6 +211,10 @@ class LangGraphAgentService:
             Compiled StateGraph workflow
         """
         workflow = StateGraph(AgentState)
+        
+        # Log available tools
+        tool_names = [tool.name if hasattr(tool, 'name') else str(tool) for tool in tools]
+        logger.info(f"🔧 Binding {len(tools)} tools to model: {tool_names}")
         
         # Bind tools to model
         model_with_tools = self.model.bind_tools(tools)
@@ -223,8 +251,27 @@ class LangGraphAgentService:
             config: Configuration with thread_id
             
         Yields:
-            Content chunks from the model
+            Content chunks from the model and status updates for tool execution
         """
+        # Map tool names to user-friendly status messages
+        tool_status_messages = {
+            "get_portfolio_holdings": "📊 Fetching your portfolio holdings...\n\n",
+            "analyze_portfolio_performance": "📈 Analyzing portfolio performance...\n\n",
+            "compare_portfolio_performance": "📊 Comparing portfolio performance...\n\n",
+            "get_market_context": "🌍 Getting market context...\n\n",
+            "get_market_sentiment": "💭 Analyzing market sentiment...\n\n",
+            "get_real_time_prices": "💰 Fetching real-time stock prices...\n\n"
+        }
+        
+        tool_completion_messages = {
+            "get_portfolio_holdings": "✓ Portfolio data retrieved\n\n",
+            "analyze_portfolio_performance": "✓ Analysis complete\n\n",
+            "compare_portfolio_performance": "✓ Comparison complete\n\n",
+            "get_market_context": "✓ Market context retrieved\n\n",
+            "get_market_sentiment": "✓ Sentiment analysis complete\n\n",
+            "get_real_time_prices": "✓ Prices retrieved\n\n"
+        }
+        
         async for event in graph.astream_events(
             initial_state,
             config=config,
@@ -236,12 +283,23 @@ class LangGraphAgentService:
                 if hasattr(chunk, "content") and chunk.content:
                     yield chunk.content
             
-            # Log tool calls
+            # Stream status updates when tools are called
             elif event["event"] == "on_tool_start":
-                logger.info(f"Tool called: {event['name']}")
+                tool_name = event.get("name", "")
+                tool_input = event.get("data", {}).get("input", {})
+                logger.info(f"🔧 Tool called: {tool_name} with input: {tool_input}")
+                
+                # Send user-friendly status message
+                if tool_name in tool_status_messages:
+                    yield tool_status_messages[tool_name]
             
             elif event["event"] == "on_tool_end":
-                logger.info(f"Tool completed: {event['name']}")
+                tool_name = event.get("name", "")
+                logger.info(f"Tool completed: {tool_name}")
+                
+                # Send completion message
+                if tool_name in tool_completion_messages:
+                    yield tool_completion_messages[tool_name]
     
     async def stream_chat(
         self,
@@ -264,8 +322,21 @@ class LangGraphAgentService:
             Chunks of the AI response
         """
         try:
+            # Create EOD tool if configured
+            eod_tool = None
+            if self.settings.eod_api_token:
+                eod_tool = EodMarketDataTool(
+                    api_token=self.settings.eod_api_token,
+                    base_url=self.settings.eod_api_base_url,
+                    timeout_seconds=self.settings.eod_api_timeout_seconds
+                )
+            
+            # Create pricing services
+            currency_service = CurrencyConversionService(db)
+            pricing_service = PricingCalculationService(currency_service)
+            
             # Create services with database session
-            holding_service = HoldingService(db)
+            holding_service = HoldingService(db, eod_tool, pricing_service)
             portfolio_analysis_service = PortfolioAnalysisService(holding_service)
             conversation_thread_service = ConversationThreadService(db)
             
