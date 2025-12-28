@@ -6,6 +6,12 @@ I decided to build this because I wanted to see how a python based agentic appli
 
 This solution does not implement the full feature set of the earlier one, nor does it adopt the full DDD approach. The aim here was simplicity. I was keen to understand how langgraph handles memory and tool use.
 
+to do:
+1) authentication by account
+2) guardrails
+3) eval framework as per c# solution
+4) some refactoring
+
 ## Features
 
 - **FastAPI** - Modern, fast web framework with automatic OpenAPI documentation
