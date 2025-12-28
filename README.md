@@ -19,7 +19,7 @@ to do:
 - **Pydantic** - Data validation and settings management
 - **Repository Pattern** - Clean separation of data access logic
 - **Service Layer** - Business logic and domain operations
-- **LangChain/LangGraph** - AI agent functionality (coming soon)
+- **LangChain/LangGraph** - AI agent functionality
 
 ## Project Structure
 
