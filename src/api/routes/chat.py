@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.core.ai_config import AIConfig
-from src.core.config import Settings
+from src.core.config import settings as app_settings, Settings
 from src.db.session import get_db
 from src.services.holding_service import HoldingService
 from src.services.ai.agent_prompt_service import AgentPromptService
@@ -51,7 +51,7 @@ def get_prompt_service() -> AgentPromptService:
 @lru_cache()
 def get_settings() -> Settings:
     """Get application settings (singleton)."""
-    return Settings()
+    return app_settings
 
 
 @lru_cache()

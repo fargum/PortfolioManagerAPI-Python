@@ -3,7 +3,7 @@ LangChain tool for retrieving portfolio holdings.
 """
 import logging
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Optional
 
 from langchain_core.tools import tool
 
@@ -14,8 +14,8 @@ from src.schemas.holding import PortfolioHoldingDto
 logger = logging.getLogger(__name__)
 
 # Global service instance - will be injected
-_holding_service: HoldingService = None
-_account_id: int = None
+_holding_service: Optional[HoldingService] = None
+_account_id: Optional[int] = None
 
 
 def initialize_holdings_tool(holding_service: HoldingService, account_id: int):
@@ -41,6 +41,10 @@ async def get_portfolio_holdings(
     - TotalValue: Total portfolio value
     """
     try:
+        # Validate service is initialized
+        if _holding_service is None or _account_id is None:
+            return {"Error": "Holdings tool not initialized. Please call initialize_holdings_tool first."}
+        
         # Smart date handling: if asking for 'today', 'current', or similar, use today's date
         effective_date = date
         if not date or date.lower() in ['today', 'current', 'now']:

@@ -2,7 +2,11 @@
 from dataclasses import dataclass, field
 from decimal import Decimal
 from datetime import date
-from typing import Optional
+from typing import Optional, TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from src.db.models.holding import Holding
+    from src.db.models.instrument import Instrument
 
 
 @dataclass
@@ -16,8 +20,8 @@ class ServiceResult:
 @dataclass
 class AddHoldingResult(ServiceResult):
     """Result for AddHoldingAsync operation."""
-    created_holding: Optional[object] = None  # Will be Holding model
-    instrument: Optional[object] = None  # Will be Instrument model
+    created_holding: Optional[Any] = None  # Holding model
+    instrument: Optional[Any] = None  # Instrument model
     instrument_created: bool = False
     current_price: Optional[Decimal] = None
     current_value: Optional[Decimal] = None
@@ -26,7 +30,7 @@ class AddHoldingResult(ServiceResult):
 @dataclass
 class UpdateHoldingResult(ServiceResult):
     """Result for UpdateHoldingUnitsAsync operation."""
-    updated_holding: Optional[object] = None  # Will be Holding model
+    updated_holding: Optional[Any] = None  # Holding model
     previous_units: Decimal = Decimal("0")
     new_units: Decimal = Decimal("0")
     previous_current_value: Decimal = Decimal("0")

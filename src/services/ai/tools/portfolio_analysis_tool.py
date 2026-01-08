@@ -3,7 +3,7 @@ LangChain tool for portfolio performance analysis.
 """
 import logging
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Optional
 
 from langchain_core.tools import tool
 
@@ -13,8 +13,8 @@ from src.services.ai.utils.date_utilities import DateUtilities
 logger = logging.getLogger(__name__)
 
 # Global service instance - will be injected
-_portfolio_analysis_service: PortfolioAnalysisService = None
-_account_id: int = None
+_portfolio_analysis_service: Optional[PortfolioAnalysisService] = None
+_account_id: Optional[int] = None
 
 
 def initialize_analysis_tool(portfolio_analysis_service: PortfolioAnalysisService, account_id: int):
@@ -42,6 +42,10 @@ async def analyze_portfolio_performance(
     - Metrics: Performance metrics (top/bottom performers)
     """
     try:
+        # Validate service is initialized
+        if _portfolio_analysis_service is None or _account_id is None:
+            return {"Error": "Analysis tool not initialized. Please call initialize_analysis_tool first."}
+        
         # Smart date handling
         effective_date = analysis_date
         if not analysis_date or analysis_date.lower() in ['today', 'current', 'now']:

@@ -1,5 +1,5 @@
 """Business logic service for Holdings."""
-from typing import List, Optional
+from typing import Any, List, Optional, Sequence
 from datetime import datetime, date
 from decimal import Decimal
 import logging
@@ -132,7 +132,7 @@ class HoldingService:
     
     def _build_holdings_response(
         self, 
-        holdings_rows: List, 
+        holdings_rows: Sequence[Any], 
         valuation_date: date
     ) -> List[dict]:
         """Build holdings response from database rows without real-time pricing."""
@@ -189,19 +189,19 @@ class HoldingService:
         )
         
         return AccountHoldingsResponse(
-            account_id=account_id,
-            valuation_date=valuation_date,
+            accountId=account_id,
+            valuationDate=valuation_date,
             holdings=holding_dtos,
-            total_holdings=len(holding_dtos),
-            total_current_value=total_current_value,
-            total_bought_value=total_bought_value,
-            total_gain_loss=total_gain_loss,
-            total_gain_loss_percentage=total_gain_loss_percentage
+            totalHoldings=len(holding_dtos),
+            totalCurrentValue=total_current_value,
+            totalBoughtValue=total_bought_value,
+            totalGainLoss=total_gain_loss,
+            totalGainLossPercentage=total_gain_loss_percentage
         )
     
     async def _apply_real_time_pricing(
         self, 
-        holdings_rows: List, 
+        holdings_rows: Sequence[Any], 
         valuation_date: date
     ) -> List[dict]:
         """Apply real-time pricing to holdings using EOD market data with proper pricing calculations (no persistence)."""

@@ -2,7 +2,7 @@
 LangChain tool for portfolio performance comparison.
 """
 import logging
-from typing import Annotated
+from typing import Annotated, Optional
 
 from langchain_core.tools import tool
 
@@ -12,8 +12,8 @@ from src.services.ai.utils.date_utilities import DateUtilities
 logger = logging.getLogger(__name__)
 
 # Global service instance - will be injected
-_portfolio_analysis_service: PortfolioAnalysisService = None
-_account_id: int = None
+_portfolio_analysis_service: Optional[PortfolioAnalysisService] = None
+_account_id: Optional[int] = None
 
 
 def initialize_comparison_tool(portfolio_analysis_service: PortfolioAnalysisService, account_id: int):
@@ -42,6 +42,10 @@ async def compare_portfolio_performance(
     - Insights: Analysis insights (trends, drivers, opportunities)
     """
     try:
+        # Validate service is initialized
+        if _portfolio_analysis_service is None or _account_id is None:
+            return {"Error": "Comparison tool not initialized. Please call initialize_comparison_tool first."}
+        
         # Parse dates
         parsed_start = DateUtilities.parse_date_time(start_date)
         parsed_end = DateUtilities.parse_date_time(end_date)

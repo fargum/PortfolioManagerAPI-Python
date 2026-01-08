@@ -165,10 +165,10 @@ async def add_holding(
         success=result.success,
         message=result.message,
         errors=result.errors if result.errors else None,
-        holding_id=result.created_holding.id if result.created_holding else None,
-        instrument_created=result.instrument_created,
-        current_price=result.current_price,
-        current_value=result.current_value
+        holdingId=result.created_holding.id if result.created_holding else None,
+        instrumentCreated=result.instrument_created,
+        currentPrice=result.current_price,
+        currentValue=result.current_value
     )
     
     # Add instrument info if available
@@ -178,9 +178,9 @@ async def add_holding(
             ticker=result.instrument.ticker,
             name=result.instrument.name,
             description=result.instrument.description,
-            currency_code=result.instrument.currency_code or "USD",
-            quote_unit=result.instrument.quote_unit,
-            instrument_type_id=result.instrument.instrument_type_id
+            currencyCode=result.instrument.currency_code or "USD",
+            quoteUnit=result.instrument.quote_unit,
+            instrumentTypeId=result.instrument.instrument_type_id
         )
     
     if not result.success:
@@ -239,11 +239,11 @@ async def update_holding_units(
         success=result.success,
         message=result.message,
         errors=result.errors if result.errors else None,
-        holding_id=holding_id,
-        previous_units=result.previous_units,
-        new_units=result.new_units,
-        previous_current_value=result.previous_current_value,
-        new_current_value=result.new_current_value,
+        holdingId=holding_id,
+        previousUnits=result.previous_units,
+        newUnits=result.new_units,
+        previousCurrentValue=result.previous_current_value,
+        newCurrentValue=result.new_current_value,
         ticker=ticker
     )
     
@@ -289,9 +289,9 @@ async def delete_holding(
         success=result.success,
         message=result.message,
         errors=result.errors if result.errors else None,
-        deleted_holding_id=result.deleted_holding_id,
-        deleted_ticker=result.deleted_ticker,
-        portfolio_id=result.portfolio_id
+        deletedHoldingId=result.deleted_holding_id,
+        deletedTicker=result.deleted_ticker,
+        portfolioId=result.portfolio_id
     )
     
     if not result.success:

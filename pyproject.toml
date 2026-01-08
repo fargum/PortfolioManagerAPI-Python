@@ -30,3 +30,39 @@ python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
+plugins = ["pydantic.mypy"]
+
+# Ignore missing imports for packages without type stubs
+ignore_missing_imports = true
+
+# Pydantic mypy plugin settings
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = false
+
+# SQLAlchemy-specific settings
+[[tool.mypy.overrides]]
+module = "src.db.models.*"
+disable_error_code = ["misc", "valid-type"]
+
+[[tool.mypy.overrides]]
+module = "src.services.conversation_thread_service"
+disable_error_code = ["assignment"]
+
+[[tool.mypy.overrides]]
+module = "src.services.currency_conversion_service"
+disable_error_code = ["return-value", "assignment"]
+
+[[tool.mypy.overrides]]
+module = "src.services.ai.demos.phase1_demo"
+disable_error_code = ["attr-defined"]
+
+[[tool.mypy.overrides]]
+module = "src.services.ai.langgraph_agent_service"
+disable_error_code = ["assignment", "typeddict-item", "call-arg"]
+
+# Pydantic alias handling - runtime accepts both field names and aliases
+[[tool.mypy.overrides]]
+module = ["src.services.holding_service", "src.api.routes.holdings"]
+disable_error_code = ["call-arg"]

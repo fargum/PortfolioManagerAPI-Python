@@ -19,8 +19,8 @@ import sys
 from datetime import datetime
 
 # Set UTF-8 encoding for stdout to handle Unicode characters
-if sys.platform == "win32":
-    sys.stdout.reconfigure(encoding='utf-8')
+if sys.platform == "win32" and hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')  # type: ignore[union-attr]
 
 from src.core.ai_config import AIConfig
 from src.core.config import settings

@@ -1,7 +1,7 @@
 """EOD Historical Data real-time pricing tool."""
 import logging
 import asyncio
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime, date
 import httpx
 from decimal import Decimal
@@ -188,7 +188,7 @@ class EodMarketDataTool:
             # Use EOD's news API: https://eodhd.com/api/news?s=ticker1,ticker2&offset=0&limit=10&api_token=TOKEN&fmt=json
             ticker_param = ",".join(cleaned_tickers)
             url = f"{self.base_url}/news"
-            params = {
+            params: Dict[str, str | int] = {
                 "s": ticker_param,
                 "offset": 0,
                 "limit": limit,
@@ -214,7 +214,7 @@ class EodMarketDataTool:
             logger.error(f"Error fetching financial news from EOD: {ex}", exc_info=True)
             return []
     
-    def _parse_news_response(self, json_data: any) -> List[dict]:
+    def _parse_news_response(self, json_data: Any) -> List[dict]:
         """
         Parse news response from EOD API.
         
@@ -370,7 +370,7 @@ class EodMarketDataTool:
             logger.error(f"Error fetching market sentiment from EOD: {ex}", exc_info=True)
             return self._create_default_sentiment_response(target_date)
     
-    def _parse_sentiment_response(self, json_data: any, target_date: date) -> Optional[dict]:
+    def _parse_sentiment_response(self, json_data: Any, target_date: date) -> Optional[dict]:
         """
         Parse sentiment response from EOD API.
         EOD returns format: {"TICKER": [{"date": "2022-04-22", "count": 2, "normalized": 0.822}]}
