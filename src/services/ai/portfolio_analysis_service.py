@@ -62,9 +62,8 @@ class PortfolioAnalysisService:
                 return self._create_empty_analysis(account_id, analysis_date)
             
             # Convert holdings to performance DTOs
-            holding_performance = []
-            for h in response.holdings:
-                holding_performance.append({
+            holding_performance = [
+                {
                     "Ticker": h.ticker,
                     "InstrumentName": h.instrument_name,
                     "UnitAmount": float(h.units),
@@ -74,7 +73,9 @@ class PortfolioAnalysisService:
                     "GainLossPercentage": float(h.gain_loss_percentage),
                     "TotalReturn": float(h.gain_loss),
                     "TotalReturnPercentage": float((h.current_value - h.bought_value) / h.bought_value) if h.bought_value > 0 else 0.0
-                })
+                }
+                for h in response.holdings
+            ]
             
             # Use service-calculated totals instead of recalculating
             total_value = float(response.total_current_value)

@@ -80,37 +80,29 @@ class AgentPromptService:
                 prompt_parts.append("")
                 
                 prompt_parts.append("✅ Perfect times to use tools:")
-                for example in tool_guidance.get("WhenToUseTools", []):
-                    prompt_parts.append(f'- "{example}"')
+                prompt_parts.extend(f'- "{example}"' for example in tool_guidance.get("WhenToUseTools", []))
                 prompt_parts.append("")
                 
                 prompt_parts.append("❌ Just have a normal chat for:")
-                for example in tool_guidance.get("WhenNotToUseTools", []):
-                    prompt_parts.append(f'- "{example}"')
+                prompt_parts.extend(f'- "{example}"' for example in tool_guidance.get("WhenNotToUseTools", []))
                 prompt_parts.append("")
                 
                 # Tool combinations
-                tool_combos = tool_guidance.get("ToolCombinations", [])
-                if tool_combos:
+                if tool_combos := tool_guidance.get("ToolCombinations", []):
                     prompt_parts.append("TOOL COMBINATIONS:")
-                    for combo in tool_combos:
-                        prompt_parts.append(combo)
+                    prompt_parts.extend(tool_combos)
                     prompt_parts.append("")
                 
                 # Available tools
-                available_tools = tool_guidance.get("AvailableTools", [])
-                if available_tools:
+                if available_tools := tool_guidance.get("AvailableTools", []):
                     prompt_parts.append("YOUR AVAILABLE TOOLS:")
-                    for tool in available_tools:
-                        prompt_parts.append(f"- {tool}")
+                    prompt_parts.extend(f"- {tool}" for tool in available_tools)
                     prompt_parts.append("")
                 
                 # News and sentiment guidance
-                news_guidance = tool_guidance.get("NewsAndSentimentGuidance", [])
-                if news_guidance:
+                if news_guidance := tool_guidance.get("NewsAndSentimentGuidance", []):
                     prompt_parts.append("CRITICAL - NEWS AND SENTIMENT TOOLS:")
-                    for guidance in news_guidance:
-                        prompt_parts.append(guidance)
+                    prompt_parts.extend(news_guidance)
                     prompt_parts.append("")
             
             # Communication style
@@ -126,8 +118,7 @@ class AgentPromptService:
                 prompt_parts.append(f"## {bad_example.get('Title', 'Example')}")
                 bad_content = bad_example.get("Content", "")
                 if isinstance(bad_content, list):
-                    for item in bad_content:
-                        prompt_parts.append(f"- {item}")
+                    prompt_parts.extend(f"- {item}" for item in bad_content)
                 else:
                     prompt_parts.append(bad_content)
                 prompt_parts.append("")
@@ -138,18 +129,15 @@ class AgentPromptService:
                 prompt_parts.append(f"## {good_example.get('Title', 'Example')}")
                 good_content = good_example.get("Content", "")
                 if isinstance(good_content, list):
-                    for item in good_content:
-                        prompt_parts.append(item)
+                    prompt_parts.extend(good_content)
                 else:
                     prompt_parts.append(good_content)
                 prompt_parts.append("")
             
             # Formatting guidelines
-            formatting = advisor_config.get("FormattingGuidelines", [])
-            if formatting:
+            if formatting := advisor_config.get("FormattingGuidelines", []):
                 prompt_parts.append("FORMATTING THAT FEELS NATURAL:")
-                for guideline in formatting:
-                    prompt_parts.append(f"- {guideline}")
+                prompt_parts.extend(f"- {guideline}" for guideline in formatting)
                 prompt_parts.append("")
             
             # Table example
@@ -162,11 +150,9 @@ class AgentPromptService:
                 prompt_parts.append("")
             
             # Key reminders
-            reminders = advisor_config.get("KeyReminders", [])
-            if reminders:
+            if reminders := advisor_config.get("KeyReminders", []):
                 prompt_parts.append("REMEMBER:")
-                for reminder in reminders:
-                    prompt_parts.append(f"- {reminder}")
+                prompt_parts.extend(f"- {reminder}" for reminder in reminders)
                 prompt_parts.append("")
             
             # Personality

@@ -136,37 +136,26 @@ class HoldingService:
         valuation_date: date
     ) -> List[dict]:
         """Build holdings response from database rows without real-time pricing."""
-        holdings_with_details = []
-        
-        for row in holdings_rows:
-            holding = row[0]
-            ticker = row[1]
-            instrument_name = row[2]
-            description = row[3]
-            currency_code = row[4]
-            quote_unit = row[5]  # Now we have quote_unit
-            portfolio_name = row[6]
-            portfolio_id_joined = row[7]
-            
-            holdings_with_details.append({
-                'holding_id': holding.id,
-                'portfolio_id': portfolio_id_joined,
-                'portfolio_name': portfolio_name,
+        return [
+            {
+                'holding_id': (holding := row[0]).id,
+                'portfolio_id': row[7],
+                'portfolio_name': row[6],
                 'platform_id': holding.platform_id,
                 'platform_name': '',  # TODO: Join platform table
-                'ticker': ticker,
-                'instrument_name': instrument_name,
+                'ticker': row[1],
+                'instrument_name': row[2],
                 'units': holding.unit_amount,
                 'bought_value': holding.bought_value,
                 'current_value': holding.current_value,
                 'current_price': holding.current_value / holding.unit_amount if holding.unit_amount > 0 else None,
                 'gain_loss': holding.current_value - holding.bought_value,
                 'gain_loss_percentage': ((holding.current_value - holding.bought_value) / holding.bought_value * 100) if holding.bought_value > 0 else Decimal('0'),
-                'currency_code': currency_code or 'USD',
+                'currency_code': row[4] or 'USD',
                 'valuation_date': valuation_date
-            })
-        
-        return holdings_with_details
+            }
+            for row in holdings_rows
+        ]
     
     def _build_account_holdings_response(
         self,

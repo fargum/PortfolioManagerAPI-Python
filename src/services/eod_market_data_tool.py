@@ -171,15 +171,11 @@ class EodMarketDataTool:
                 logger.warning("EOD API token not configured, returning empty news")
                 return []
             
-            # Clean ticker symbols - remove exchange suffixes
-            cleaned_tickers = []
-            for ticker in tickers:
-                # Remove any exchange suffix (.LSE, .US, .L, etc.)
-                dot_index = ticker.rfind('.')
-                if dot_index > 0:
-                    cleaned_tickers.append(ticker[:dot_index])
-                else:
-                    cleaned_tickers.append(ticker)
+            # Clean ticker symbols - remove exchange suffixes (.LSE, .US, .L, etc.)
+            cleaned_tickers = [
+                ticker[:dot_index] if (dot_index := ticker.rfind('.')) > 0 else ticker
+                for ticker in tickers
+            ]
             
             if not cleaned_tickers:
                 logger.warning("No valid tickers for news fetch")
@@ -227,18 +223,17 @@ class EodMarketDataTool:
         try:
             logger.info(f"Parsing EOD news response")
             
-            news_list = []
-            
             if isinstance(json_data, list):
-                for item in json_data:
-                    parsed = self._parse_single_news_item(item)
-                    if parsed:
-                        news_list.append(parsed)
+                news_list = [
+                    parsed for item in json_data
+                    if (parsed := self._parse_single_news_item(item))
+                ]
             elif isinstance(json_data, dict):
                 # Single news item
                 parsed = self._parse_single_news_item(json_data)
-                if parsed:
-                    news_list.append(parsed)
+                news_list = [parsed] if parsed else []
+            else:
+                news_list = []
             
             logger.info(f"Parsed {len(news_list)} news items from EOD response")
             return news_list
