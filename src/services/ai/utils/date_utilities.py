@@ -1,7 +1,7 @@
 """
 Date parsing utilities for AI tools.
 """
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from dateutil import parser
 import logging
 
@@ -35,22 +35,20 @@ class DateUtilities:
             ValueError: If date cannot be parsed
         """
         try:
-            # Handle relative terms
-            date_lower = date_string.lower().strip()
-            if date_lower in ['today', 'current', 'now']:
-                return datetime.now().date()
-            elif date_lower == 'yesterday':
-                from datetime import timedelta
-                return (datetime.now() - timedelta(days=1)).date()
-            elif date_lower == 'tomorrow':
-                from datetime import timedelta
-                return (datetime.now() + timedelta(days=1)).date()
-            
-            # Try parsing with dateutil (handles many formats)
-            # Note: dayfirst=False for ISO format (YYYY-MM-DD) compatibility
-            # ISO format should be preferred, but this handles DD/MM/YYYY too
-            parsed = parser.parse(date_string, dayfirst=False)
-            return parsed.date()
+            # Handle relative terms using pattern matching
+            match date_string.lower().strip():
+                case 'today' | 'current' | 'now':
+                    return datetime.now().date()
+                case 'yesterday':
+                    return (datetime.now() - timedelta(days=1)).date()
+                case 'tomorrow':
+                    return (datetime.now() + timedelta(days=1)).date()
+                case _:
+                    # Try parsing with dateutil (handles many formats)
+                    # Note: dayfirst=False for ISO format (YYYY-MM-DD) compatibility
+                    # ISO format should be preferred, but this handles DD/MM/YYYY too
+                    parsed = parser.parse(date_string, dayfirst=False)
+                    return parsed.date()
             
         except Exception as e:
             logger.error(f"Failed to parse date '{date_string}': {str(e)}")
@@ -71,20 +69,18 @@ class DateUtilities:
             ValueError: If date cannot be parsed
         """
         try:
-            # Handle relative terms
-            date_lower = date_string.lower().strip()
-            if date_lower in ['today', 'current', 'now']:
-                return datetime.now()
-            elif date_lower == 'yesterday':
-                from datetime import timedelta
-                return datetime.now() - timedelta(days=1)
-            elif date_lower == 'tomorrow':
-                from datetime import timedelta
-                return datetime.now() + timedelta(days=1)
-            
-            # Try parsing with dateutil (handles many formats)
-            parsed = parser.parse(date_string, dayfirst=True)
-            return parsed
+            # Handle relative terms using pattern matching
+            match date_string.lower().strip():
+                case 'today' | 'current' | 'now':
+                    return datetime.now()
+                case 'yesterday':
+                    return datetime.now() - timedelta(days=1)
+                case 'tomorrow':
+                    return datetime.now() + timedelta(days=1)
+                case _:
+                    # Try parsing with dateutil (handles many formats)
+                    parsed = parser.parse(date_string, dayfirst=True)
+                    return parsed
             
         except Exception as e:
             logger.error(f"Failed to parse datetime '{date_string}': {str(e)}")

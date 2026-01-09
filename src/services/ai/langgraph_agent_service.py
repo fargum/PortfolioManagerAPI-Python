@@ -277,29 +277,31 @@ class LangGraphAgentService:
             config=config,
             version="v2"
         ):
-            # Stream token events from the model
-            if event["event"] == "on_chat_model_stream":
-                chunk = event["data"]["chunk"]
-                if hasattr(chunk, "content") and chunk.content:
-                    yield chunk.content
-            
-            # Stream status updates when tools are called
-            elif event["event"] == "on_tool_start":
-                tool_name = event.get("name", "")
-                tool_input = event.get("data", {}).get("input", {})
-                logger.info(f"🔧 Tool called: {tool_name} with input: {tool_input}")
+            # Handle events using pattern matching
+            match event["event"]:
+                case "on_chat_model_stream":
+                    # Stream token events from the model
+                    chunk = event["data"]["chunk"]
+                    if hasattr(chunk, "content") and chunk.content:
+                        yield chunk.content
                 
-                # Send user-friendly status message
-                if tool_name in tool_status_messages:
-                    yield tool_status_messages[tool_name]
-            
-            elif event["event"] == "on_tool_end":
-                tool_name = event.get("name", "")
-                logger.info(f"Tool completed: {tool_name}")
+                case "on_tool_start":
+                    # Stream status updates when tools are called
+                    tool_name = event.get("name", "")
+                    tool_input = event.get("data", {}).get("input", {})
+                    logger.info(f"🔧 Tool called: {tool_name} with input: {tool_input}")
+                    
+                    # Send user-friendly status message
+                    if tool_name in tool_status_messages:
+                        yield tool_status_messages[tool_name]
                 
-                # Send completion message
-                if tool_name in tool_completion_messages:
-                    yield tool_completion_messages[tool_name]
+                case "on_tool_end":
+                    tool_name = event.get("name", "")
+                    logger.info(f"Tool completed: {tool_name}")
+                    
+                    # Send completion message
+                    if tool_name in tool_completion_messages:
+                        yield tool_completion_messages[tool_name]
     
     async def stream_chat(
         self,
