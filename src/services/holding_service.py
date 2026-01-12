@@ -14,7 +14,8 @@ from src.schemas.holding import AddHoldingApiRequest, PortfolioHoldingDto, Accou
 from src.services.result_objects import (
     AddHoldingResult,
     UpdateHoldingResult,
-    DeleteHoldingResult
+    DeleteHoldingResult,
+    ErrorCode
 )
 from src.services.eod_market_data_tool import EodMarketDataTool
 from src.services.pricing_calculation_service import PricingCalculationService
@@ -385,7 +386,8 @@ class HoldingService:
                 return AddHoldingResult(
                     success=False,
                     message=f"Portfolio {portfolio_id} not found or not accessible",
-                    errors=["Portfolio not found or does not belong to this account"]
+                    errors=["Portfolio not found or does not belong to this account"],
+                    error_code=ErrorCode.NOT_FOUND
                 )
             
             # Find or create instrument
@@ -427,7 +429,8 @@ class HoldingService:
                 return AddHoldingResult(
                     success=False,
                     message=f"Holding for {request.ticker} on platform {request.platform_id} already exists for this date",
-                    errors=["Duplicate holding for this instrument and date"]
+                    errors=["Duplicate holding for this instrument and date"],
+                    error_code=ErrorCode.DUPLICATE
                 )
             
             # Calculate current value (would use real-time pricing in production)
@@ -467,7 +470,8 @@ class HoldingService:
             return AddHoldingResult(
                 success=False,
                 message="An error occurred while adding the holding",
-                errors=[str(e)]
+                errors=[str(e)],
+                error_code=ErrorCode.INTERNAL_ERROR
             )
     
     async def update_holding_units_async(
@@ -504,7 +508,8 @@ class HoldingService:
                 return UpdateHoldingResult(
                     success=False,
                     message=f"Holding {holding_id} not found or not accessible",
-                    errors=["Holding not found or does not belong to this account"]
+                    errors=["Holding not found or does not belong to this account"],
+                    error_code=ErrorCode.NOT_FOUND
                 )
             
             holding, portfolio, instrument = row
@@ -543,6 +548,7 @@ class HoldingService:
                 success=False,
                 message="An error occurred while updating the holding",
                 errors=[str(e)],
+                error_code=ErrorCode.INTERNAL_ERROR,
                 previous_units=Decimal('0'),
                 new_units=Decimal('0'),
                 previous_current_value=Decimal('0'),
@@ -581,7 +587,8 @@ class HoldingService:
                 return DeleteHoldingResult(
                     success=False,
                     message=f"Holding {holding_id} not found or not accessible",
-                    errors=["Holding not found or does not belong to this account"]
+                    errors=["Holding not found or does not belong to this account"],
+                    error_code=ErrorCode.NOT_FOUND
                 )
             
             holding, portfolio, instrument = row
@@ -607,5 +614,6 @@ class HoldingService:
             return DeleteHoldingResult(
                 success=False,
                 message="An error occurred while deleting the holding",
-                errors=[str(e)]
+                errors=[str(e)],
+                error_code=ErrorCode.INTERNAL_ERROR
             )

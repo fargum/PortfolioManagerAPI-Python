@@ -52,10 +52,12 @@ app.add_middleware(
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     from fastapi.responses import JSONResponse
+    # Log the full exception details for debugging (server-side only)
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    # Return a generic error message to the client - never expose internal details
     return JSONResponse(
         status_code=500,
-        content={"detail": f"Internal server error: {str(exc)}"}
+        content={"detail": "An unexpected error occurred. Please try again later."}
     )
 
 # Include routers

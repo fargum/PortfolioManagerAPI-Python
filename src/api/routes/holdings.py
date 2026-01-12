@@ -10,6 +10,7 @@ from src.services.holding_service import HoldingService
 from src.services.eod_market_data_tool import EodMarketDataTool
 from src.services.pricing_calculation_service import PricingCalculationService
 from src.services.currency_conversion_service import CurrencyConversionService
+from src.services.result_objects import ErrorCode
 from src.core.config import settings
 from src.schemas.holding import (
     AccountHoldingsResponse,
@@ -184,13 +185,13 @@ async def add_holding(
         )
     
     if not result.success:
-        # Determine appropriate status code
-        if "not found" in result.message.lower() or "not accessible" in result.message.lower():
+        # Determine appropriate status code based on error_code
+        if result.error_code in (ErrorCode.NOT_FOUND, ErrorCode.NOT_ACCESSIBLE):
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
                 content=response.model_dump(by_alias=True)
             )
-        elif "already exists" in result.message.lower() or "duplicate" in result.message.lower():
+        elif result.error_code == ErrorCode.DUPLICATE:
             return JSONResponse(
                 status_code=status.HTTP_409_CONFLICT,
                 content=response.model_dump(by_alias=True)
@@ -248,7 +249,7 @@ async def update_holding_units(
     )
     
     if not result.success:
-        if "not found" in result.message.lower() or "not accessible" in result.message.lower():
+        if result.error_code in (ErrorCode.NOT_FOUND, ErrorCode.NOT_ACCESSIBLE):
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
                 content=response.model_dump(by_alias=True)
@@ -295,7 +296,7 @@ async def delete_holding(
     )
     
     if not result.success:
-        if "not found" in result.message.lower() or "not accessible" in result.message.lower():
+        if result.error_code in (ErrorCode.NOT_FOUND, ErrorCode.NOT_ACCESSIBLE):
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
                 content=response.model_dump(by_alias=True)

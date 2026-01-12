@@ -2,11 +2,22 @@
 from dataclasses import dataclass, field
 from decimal import Decimal
 from datetime import date
+from enum import Enum
 from typing import Optional, TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.db.models.holding import Holding
     from src.db.models.instrument import Instrument
+
+
+class ErrorCode(str, Enum):
+    """Standardized error codes for service operations."""
+    NONE = "none"
+    NOT_FOUND = "not_found"
+    NOT_ACCESSIBLE = "not_accessible"
+    DUPLICATE = "duplicate"
+    VALIDATION_ERROR = "validation_error"
+    INTERNAL_ERROR = "internal_error"
 
 
 @dataclass
@@ -15,6 +26,7 @@ class ServiceResult:
     success: bool
     message: str
     errors: list[str] = field(default_factory=list)
+    error_code: ErrorCode = ErrorCode.NONE
 
 
 @dataclass
