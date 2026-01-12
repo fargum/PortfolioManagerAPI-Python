@@ -15,7 +15,8 @@ from src.services.result_objects import (
     AddHoldingResult,
     UpdateHoldingResult,
     DeleteHoldingResult,
-    ErrorCode
+    ErrorCode,
+    HoldingDict
 )
 from src.services.eod_market_data_tool import EodMarketDataTool
 from src.services.pricing_calculation_service import PricingCalculationService
@@ -135,7 +136,7 @@ class HoldingService:
         self, 
         holdings_rows: Sequence[Any], 
         valuation_date: date
-    ) -> List[dict]:
+    ) -> List[HoldingDict]:
         """Build holdings response from database rows without real-time pricing."""
         return [
             {
@@ -162,7 +163,7 @@ class HoldingService:
         self,
         account_id: int,
         valuation_date: date,
-        holdings_list: List[dict]
+        holdings_list: List[HoldingDict]
     ) -> AccountHoldingsResponse:
         """Build AccountHoldingsResponse with aggregated totals."""
         # Convert to DTOs
@@ -193,7 +194,7 @@ class HoldingService:
         self, 
         holdings_rows: Sequence[Any], 
         valuation_date: date
-    ) -> List[dict]:
+    ) -> List[HoldingDict]:
         """Apply real-time pricing to holdings using EOD market data with proper pricing calculations (no persistence)."""
         from src.core.constants import ExchangeConstants
         
@@ -224,7 +225,7 @@ class HoldingService:
             logger.info(f"Fetched {len(prices)} real-time prices for {len(tickers)} tickers")
             
             # Build response with real-time pricing
-            holdings_with_details = []
+            holdings_with_details: List[HoldingDict] = []
             
             for row in holdings_rows:
                 holding = row[0]

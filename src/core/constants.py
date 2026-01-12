@@ -38,5 +38,6 @@ class ExchangeConstants:
     CASH_TICKER = "CASH"
     ISF_TICKER = "ISF.LSE"
     
-    # Scaling factors for proxy instruments
+    # Scaling factors for proxy instruments. I have a proxy instrument ISF.LSE because EOF does not track
+    # the actual instrument of this holding. I use this scaling factor to adjust the valuation accordingly.
     ISF_SCALING_FACTOR = 3.362  # ISF requires 3.362x scaling

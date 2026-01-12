@@ -3,11 +3,30 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from datetime import date
 from enum import Enum
-from typing import Optional, TYPE_CHECKING, Any
+from typing import Optional, TYPE_CHECKING, Any, TypedDict
 
 if TYPE_CHECKING:
     from src.db.models.holding import Holding
     from src.db.models.instrument import Instrument
+
+
+class HoldingDict(TypedDict):
+    """Typed dictionary for holding data returned from service methods."""
+    holding_id: int
+    portfolio_id: int
+    portfolio_name: str
+    platform_id: int
+    platform_name: str
+    ticker: str
+    instrument_name: str
+    units: Decimal
+    bought_value: Decimal
+    current_value: Decimal
+    current_price: Optional[Decimal]
+    gain_loss: Decimal
+    gain_loss_percentage: Decimal
+    currency_code: str
+    valuation_date: date
 
 
 class ErrorCode(str, Enum):

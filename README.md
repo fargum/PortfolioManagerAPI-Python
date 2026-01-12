@@ -17,8 +17,7 @@ to do:
 - **FastAPI** - Modern, fast web framework with automatic OpenAPI documentation
 - **SQLAlchemy** - Async ORM for PostgreSQL database access
 - **Pydantic** - Data validation and settings management
-- **Repository Pattern** - Clean separation of data access logic
-- **Service Layer** - Business logic and domain operations
+- **Service Layer** - Business logic with direct database access
 - **LangChain/LangGraph** - AI agent functionality
 
 ## Project Structure
@@ -31,7 +30,6 @@ PortfolioManagerPythonAPI/
 │   │   └── routes/        # API endpoints
 │   ├── core/              # Core configuration
 │   ├── db/                # Database models and session
-│   ├── repositories/      # Data access layer
 │   ├── schemas/           # Pydantic schemas (DTOs)
 │   └── services/          # Business logic
 ├── tests/                 # Unit and integration tests
