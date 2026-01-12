@@ -65,7 +65,7 @@ class VoiceResponseAdapter:
         final_text: str,
         tool_events: list[dict[str, Any]],
         query: str,
-        max_speak_words: int = 45,
+        max_speak_words: int = 100,
         model_name: Optional[str] = None,
         latency_ms: int = 0,
         include_telemetry: bool = False,
@@ -134,14 +134,69 @@ class VoiceResponseAdapter:
 
         return sources
 
+    def _extract_voice_summary(self) -> Optional[str]:
+        """
+        Extract the VOICE_SUMMARY section from the AI response.
+        
+        The agent is instructed to format responses with:
+        **VOICE_SUMMARY**
+        <summary text>
+        
+        **DETAILED**
+        <full response>
+        
+        Returns:
+            Extracted voice summary text, or None if not found
+        """
+        # Look for **VOICE_SUMMARY** section - flexible pattern allowing for variations
+        # Handles: **VOICE_SUMMARY**, **VOICE SUMMARY**, **Voice Summary**, etc.
+        pattern = r"\*\*\s*VOICE[_\s]?SUMMARY\s*\*\*\s*[:\n]?(.+?)(?=\*\*\s*DETAILED|$)"
+        match = re.search(pattern, self.final_text, re.DOTALL | re.IGNORECASE)
+        
+        if match:
+            summary = match.group(1).strip()
+            # Clean up any residual markdown
+            summary = sanitize_for_tts(summary)
+            logger.info(f"Extracted VOICE_SUMMARY ({len(summary.split())} words)")
+            return summary if summary else None
+        
+        logger.info("No VOICE_SUMMARY section found in AI response, using fallback")
+        return None
+    
+    def _extract_detailed_section(self) -> str:
+        """
+        Extract the DETAILED section from the AI response.
+        
+        Returns:
+            The detailed section, or the full response if no sections found
+        """
+        # Look for **DETAILED** section
+        pattern = r"\*\*DETAILED\*\*\s*\n(.+)"
+        match = re.search(pattern, self.final_text, re.DOTALL | re.IGNORECASE)
+        
+        if match:
+            return match.group(1).strip()
+        
+        # If no DETAILED section, check if there's a VOICE_SUMMARY to remove
+        voice_pattern = r"\*\*VOICE_SUMMARY\*\*\s*\n.+?(?=\n\*\*|$)"
+        cleaned = re.sub(voice_pattern, "", self.final_text, flags=re.DOTALL | re.IGNORECASE)
+        return cleaned.strip() if cleaned.strip() else self.final_text
+
     def _generate_speak_text(self) -> str:
         """
         Generate TTS-optimized speak_text from final_text.
 
-        First removes application-specific tool status messages (emojis),
-        then delegates to sanitize_for_tts() for standard markdown/URL cleanup,
-        and finally enforces the word limit.
+        First tries to extract the VOICE_SUMMARY section from the AI response.
+        Falls back to heuristic extraction if no summary section found.
         """
+        # Try to extract AI-generated voice summary first
+        voice_summary = self._extract_voice_summary()
+        if voice_summary:
+            logger.info(f"Using AI-generated voice summary ({len(voice_summary)} chars)")
+            return voice_summary
+        
+        # Fallback: heuristic extraction from full response
+        logger.info("Using heuristic extraction for speak_text (fallback)")
         text = self.final_text
 
         # Remove tool status messages (✓ ... lines) - app-specific
@@ -159,9 +214,11 @@ class VoiceResponseAdapter:
         """
         Generate answer_text with markdown and source references.
 
+        Uses the DETAILED section if present, otherwise the full response.
         If sources exist, append a "Sources:" section at the end.
         """
-        answer = self.final_text
+        # Use detailed section if available, otherwise full response
+        answer = self._extract_detailed_section()
 
         if sources:
             answer += "\n\n---\n\n**Sources:**\n"

@@ -308,7 +308,8 @@ class LangGraphAgentService:
         user_message: str,
         account_id: int,
         db,
-        thread_id: Optional[int] = None
+        thread_id: Optional[int] = None,
+        voice_mode: bool = False
     ) -> tuple[Any, dict, dict, int]:
         """
         Prepare common context for chat operations.
@@ -321,6 +322,7 @@ class LangGraphAgentService:
             account_id: Authenticated user's account ID
             db: Database session for this request
             thread_id: Optional conversation thread ID
+            voice_mode: If True, use voice-optimized prompt with summary instructions
             
         Returns:
             Tuple of (workflow, initial_state, config, thread_id) where:
@@ -362,9 +364,12 @@ class LangGraphAgentService:
         
         logger.info(f"Using conversation thread {thread.id} for account {account_id}")
         
-        # Build graph components
+        # Build graph components - use voice mode prompt if requested
         tools = self._get_portfolio_tools()
-        system_prompt = self.agent_prompt_service.get_portfolio_advisor_prompt(account_id)
+        if voice_mode:
+            system_prompt = self.agent_prompt_service.get_voice_mode_prompt(account_id)
+        else:
+            system_prompt = self.agent_prompt_service.get_portfolio_advisor_prompt(account_id)
         workflow = self._build_graph(tools, system_prompt)
         
         # Prepare state and config
@@ -485,7 +490,8 @@ class LangGraphAgentService:
         user_message: str,
         account_id: int,
         db,
-        thread_id: Optional[int] = None
+        thread_id: Optional[int] = None,
+        voice_mode: bool = False
     ) -> tuple[str, list[dict[str, Any]]]:
         """
         Execute chat and return complete response with tool events.
@@ -496,6 +502,7 @@ class LangGraphAgentService:
             account_id: Authenticated user's account ID
             db: Database session
             thread_id: Optional conversation thread ID
+            voice_mode: If True, use voice-optimized prompt with summary instructions
 
         Returns:
             Tuple of (final_text, tool_events) where:
@@ -505,7 +512,7 @@ class LangGraphAgentService:
         try:
             # Prepare common chat context
             workflow, initial_state, config, actual_thread_id = await self._prepare_chat_context(
-                user_message, account_id, db, thread_id
+                user_message, account_id, db, thread_id, voice_mode=voice_mode
             )
 
             # Create and use async checkpointer

@@ -166,6 +166,53 @@ class AgentPromptService:
             logger.error(f"Error building portfolio advisor prompt for account {account_id}: {e}")
             return f"You are a helpful financial advisor for Account ID {account_id}. Provide clear, friendly assistance with portfolio questions."
     
+    def get_voice_mode_prompt(self, account_id: int) -> str:
+        """
+        Get the portfolio advisor prompt with voice mode instructions.
+        
+        Wraps the base prompt with instructions to generate both a voice-friendly
+        summary and a detailed markdown response.
+        
+        Args:
+            account_id: Account ID to include in the prompt
+            
+        Returns:
+            Complete prompt text with voice mode formatting instructions
+        """
+        base_prompt = self.get_portfolio_advisor_prompt(account_id)
+        
+        voice_instructions = '''
+
+VOICE MODE OUTPUT FORMAT:
+You are responding to a voice assistant. Your response will be read aloud by text-to-speech.
+Structure your response in TWO clearly labeled parts:
+
+**VOICE_SUMMARY**
+Write 2-3 sentences (max 50 words) that sound natural when SPOKEN ALOUD.
+
+VOICE-FRIENDLY RULES (critical):
+- Use company NAMES only, never ticker symbols (say "BAE Systems" not "BA.LSE")
+- NO parentheses, brackets, or special characters
+- NO arrows, bullets, or dashes
+- Round numbers naturally: say "about six hundred forty-four thousand pounds" not "£644,400.61"
+- Use words for symbols: say "up" not "+", say "down" not "-" or "−"
+- Write like you're talking to a friend: "Your portfolio gained around two hundred pounds this week"
+- NO markdown formatting whatsoever
+
+BAD voice summary (DO NOT do this):
+"Portfolio value: £644,400.61 → £644,637.73 = +£237.12 (+0.04%). Top contributor: BAE Systems (BA.LSE): +£263"
+
+GOOD voice summary:
+"Your portfolio is essentially flat this week, up about two hundred and forty pounds. BAE Systems and HSBC were your best performers, while Barclays pulled things down a bit."
+
+**DETAILED**
+Your full markdown response with tables, exact figures, ticker symbols, and complete analysis.
+This section can use any formatting - it's for visual display only.
+
+ALWAYS include both **VOICE_SUMMARY** and **DETAILED** sections in every response.'''
+        
+        return base_prompt + voice_instructions
+    
     def get_prompt(self, prompt_name: str, parameters: Optional[Dict[str, Any]] = None) -> str:
         """
         Get a custom prompt by name with parameter substitution.

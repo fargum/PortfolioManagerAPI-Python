@@ -505,3 +505,124 @@ class TestActionSelection:
         action_ids = [a.id for a in response.actions]
         # Should suggest check_prices based on get_market_context tool
         assert "check_prices" in action_ids
+
+
+class TestVoiceSummaryExtraction:
+    """Test extraction of VOICE_SUMMARY and DETAILED sections."""
+
+    @pytest.mark.unit
+    def test_extracts_voice_summary_section(self) -> None:
+        """Should extract VOICE_SUMMARY section when present."""
+        text_with_sections = """**VOICE_SUMMARY**
+Your portfolio is up 2.3% today, led by strong gains in Apple.
+
+**DETAILED**
+## Portfolio Performance
+| Holding | Change |
+|---------|--------|
+| AAPL | +3.2% |
+"""
+        adapter = VoiceResponseAdapter(
+            final_text=text_with_sections,
+            tool_events=[],
+            query="How is my portfolio?",
+        )
+
+        response = adapter.build()
+        # Should use the voice summary, not truncated text
+        assert "up 2.3% today" in response.speak_text
+        assert "Apple" in response.speak_text
+        # Should not contain markdown table syntax
+        assert "|" not in response.speak_text
+
+    @pytest.mark.unit
+    def test_extracts_detailed_section_for_answer(self) -> None:
+        """Should use DETAILED section for answer_text."""
+        text_with_sections = """**VOICE_SUMMARY**
+Your portfolio is up 2.3% today.
+
+**DETAILED**
+## Full Analysis
+Here is the complete breakdown of your portfolio performance.
+"""
+        adapter = VoiceResponseAdapter(
+            final_text=text_with_sections,
+            tool_events=[],
+            query="test",
+        )
+
+        response = adapter.build()
+        # answer_text should contain the detailed section
+        assert "Full Analysis" in response.answer_text
+        assert "complete breakdown" in response.answer_text
+        # answer_text should NOT contain the voice summary header
+        assert "**VOICE_SUMMARY**" not in response.answer_text
+
+    @pytest.mark.unit
+    def test_falls_back_when_no_voice_summary(self) -> None:
+        """Should fall back to heuristic extraction when no VOICE_SUMMARY."""
+        text_without_sections = "Your portfolio is performing well. You have gains in AAPL and MSFT."
+        adapter = VoiceResponseAdapter(
+            final_text=text_without_sections,
+            tool_events=[],
+            query="test",
+            max_speak_words=20,
+        )
+
+        response = adapter.build()
+        # Should still produce speak_text via fallback
+        assert response.speak_text
+        assert len(response.speak_text) > 0
+
+    @pytest.mark.unit
+    def test_handles_malformed_sections(self) -> None:
+        """Should handle malformed section markers gracefully."""
+        malformed_text = "**VOICE_SUMMARY** without newline Some text here"
+        adapter = VoiceResponseAdapter(
+            final_text=malformed_text,
+            tool_events=[],
+            query="test",
+        )
+
+        response = adapter.build()
+        # Should not crash, should produce some output
+        assert response.speak_text
+        assert response.answer_text
+
+    @pytest.mark.unit
+    def test_voice_summary_is_sanitized(self) -> None:
+        """Voice summary should still be sanitized for TTS."""
+        text_with_url_in_summary = """**VOICE_SUMMARY**
+Check out https://example.com for more details about your gains.
+
+**DETAILED**
+Full response here.
+"""
+        adapter = VoiceResponseAdapter(
+            final_text=text_with_url_in_summary,
+            tool_events=[],
+            query="test",
+        )
+
+        response = adapter.build()
+        # URL should be removed even from voice summary
+        assert "https://" not in response.speak_text
+        assert "example.com" not in response.speak_text
+
+    @pytest.mark.unit
+    def test_case_insensitive_section_markers(self) -> None:
+        """Section markers should be case insensitive."""
+        text_lowercase = """**voice_summary**
+This is the summary.
+
+**detailed**
+This is the detail.
+"""
+        adapter = VoiceResponseAdapter(
+            final_text=text_lowercase,
+            tool_events=[],
+            query="test",
+        )
+
+        response = adapter.build()
+        assert "This is the summary" in response.speak_text

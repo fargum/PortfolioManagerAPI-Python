@@ -35,7 +35,7 @@ class ChatRequest(BaseModel):
         "ui", description="Response mode: 'ui' for markdown, 'voice' for TTS-optimized"
     )
     max_speak_words: int = Field(
-        45,
+        100,
         ge=10,
         le=100,
         alias="maxSpeakWords",
@@ -219,7 +219,7 @@ async def respond_chat(
             "query": "How is my portfolio performing?",
             "account_id": 123,
             "mode": "voice",
-            "maxSpeakWords": 45
+            "maxSpeakWords": 100
         }
     """
     try:
@@ -231,11 +231,13 @@ async def respond_chat(
         )
 
         # Execute non-streaming chat with tool event capture
+        # Use voice_mode=True for voice requests to get structured response
         final_text, tool_events = await agent_service.run_chat(
             user_message=request.query,
             account_id=request.account_id,
             db=db,
             thread_id=request.thread_id,
+            voice_mode=(request.mode == "voice"),
         )
 
         latency_ms = int((time.perf_counter() - start_time) * 1000)
