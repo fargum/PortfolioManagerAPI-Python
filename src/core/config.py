@@ -39,7 +39,10 @@ class Settings(BaseSettings):
     azure_foundry_api_key: str  # Required - no default (must be set in .env)
     azure_foundry_model_name: str = "gpt-4o-mini"
     azure_foundry_api_version: str = "2024-08-01-preview"
-    
+
+    # Voice mode settings
+    enable_voice_debug: bool = False
+
     @property
     def async_database_url(self) -> str:
         """Convert postgresql:// to postgresql+asyncpg:// for async operations."""

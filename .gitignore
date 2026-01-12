@@ -54,3 +54,8 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Claude Code artifacts
+CLAUDE.md
+.claude/
+tmpclaude-*

@@ -4,7 +4,7 @@ Uses LangGraph's StateGraph for explicit graph construction with memory persiste
 Leverages PostgresSaver checkpointer for conversation state management.
 """
 import logging
-from typing import AsyncIterator, Optional, Literal
+from typing import AsyncIterator, Optional, Literal, Any
 from typing_extensions import TypedDict
 
 from langchain_openai import AzureChatOpenAI
@@ -303,6 +303,85 @@ class LangGraphAgentService:
                     if tool_name in tool_completion_messages:
                         yield tool_completion_messages[tool_name]
     
+    async def _prepare_chat_context(
+        self,
+        user_message: str,
+        account_id: int,
+        db,
+        thread_id: Optional[int] = None
+    ) -> tuple[Any, dict, dict, int]:
+        """
+        Prepare common context for chat operations.
+        
+        Sets up services, initializes tools, creates/retrieves conversation thread,
+        and builds the graph workflow.
+        
+        Args:
+            user_message: User's message
+            account_id: Authenticated user's account ID
+            db: Database session for this request
+            thread_id: Optional conversation thread ID
+            
+        Returns:
+            Tuple of (workflow, initial_state, config, thread_id) where:
+            - workflow: Uncompiled LangGraph StateGraph
+            - initial_state: Initial state dict with messages
+            - config: Configuration dict with thread_id
+            - thread_id: The actual thread ID being used
+        """
+        # Create EOD tool if configured
+        eod_tool = None
+        if self.settings.eod_api_token:
+            eod_tool = EodMarketDataTool(
+                api_token=self.settings.eod_api_token,
+                base_url=self.settings.eod_api_base_url,
+                timeout_seconds=self.settings.eod_api_timeout_seconds
+            )
+        
+        # Create pricing services
+        currency_service = CurrencyConversionService(db)
+        pricing_service = PricingCalculationService(currency_service)
+        
+        # Create services with database session
+        holding_service = HoldingService(db, eod_tool, pricing_service)
+        portfolio_analysis_service = PortfolioAnalysisService(holding_service)
+        conversation_thread_service = ConversationThreadService(db)
+        
+        # Initialize tools with account context
+        self._initialize_tools_for_account(
+            account_id,
+            holding_service,
+            portfolio_analysis_service
+        )
+        
+        # Get or create conversation thread
+        thread = await conversation_thread_service.get_or_create_active_thread(
+            account_id=account_id,
+            thread_id=thread_id
+        )
+        
+        logger.info(f"Using conversation thread {thread.id} for account {account_id}")
+        
+        # Build graph components
+        tools = self._get_portfolio_tools()
+        system_prompt = self.agent_prompt_service.get_portfolio_advisor_prompt(account_id)
+        workflow = self._build_graph(tools, system_prompt)
+        
+        # Prepare state and config
+        initial_state = {
+            "messages": [HumanMessage(content=user_message)],
+            "account_id": account_id,
+            "thread_id": thread.id
+        }
+        
+        config = {
+            "configurable": {
+                "thread_id": f"account_{account_id}_thread_{thread.id}"
+            }
+        }
+        
+        return workflow, initial_state, config, thread.id
+
     async def stream_chat(
         self,
         user_message: str,
@@ -324,63 +403,17 @@ class LangGraphAgentService:
             Chunks of the AI response
         """
         try:
-            # Create EOD tool if configured
-            eod_tool = None
-            if self.settings.eod_api_token:
-                eod_tool = EodMarketDataTool(
-                    api_token=self.settings.eod_api_token,
-                    base_url=self.settings.eod_api_base_url,
-                    timeout_seconds=self.settings.eod_api_timeout_seconds
-                )
-            
-            # Create pricing services
-            currency_service = CurrencyConversionService(db)
-            pricing_service = PricingCalculationService(currency_service)
-            
-            # Create services with database session
-            holding_service = HoldingService(db, eod_tool, pricing_service)
-            portfolio_analysis_service = PortfolioAnalysisService(holding_service)
-            conversation_thread_service = ConversationThreadService(db)
-            
-            # Initialize tools with account context
-            self._initialize_tools_for_account(
-                account_id,
-                holding_service,
-                portfolio_analysis_service
+            # Prepare common chat context
+            workflow, initial_state, config, actual_thread_id = await self._prepare_chat_context(
+                user_message, account_id, db, thread_id
             )
-            
-            # Get or create conversation thread
-            thread = await conversation_thread_service.get_or_create_active_thread(
-                account_id=account_id,
-                thread_id=thread_id
-            )
-            
-            logger.info(f"Using conversation thread {thread.id} for account {account_id}")
-            
-            # Build graph components
-            tools = self._get_portfolio_tools()
-            system_prompt = self.agent_prompt_service.get_portfolio_advisor_prompt(account_id)
-            workflow = self._build_graph(tools, system_prompt)
             
             # Create and use async checkpointer
             async with AsyncPostgresSaver.from_conn_string(self.postgres_url) as checkpointer:
                 graph = workflow.compile(checkpointer=checkpointer)
                 
-                # Prepare state and config
-                initial_state = {
-                    "messages": [HumanMessage(content=user_message)],
-                    "account_id": account_id,
-                    "thread_id": thread.id
-                }
-                
-                config = {
-                    "configurable": {
-                        "thread_id": f"account_{account_id}_thread_{thread.id}"
-                    }
-                }
-                
                 logger.info(
-                    f"Streaming chat for account {account_id} on thread {thread.id}: {user_message[:100]}"
+                    f"Streaming chat for account {account_id} on thread {actual_thread_id}: {user_message[:100]}"
                 )
                 
                 # Stream agent response with memory
@@ -390,3 +423,102 @@ class LangGraphAgentService:
         except Exception as e:
             logger.error(f"Error in stream_chat: {str(e)}", exc_info=True)
             yield f"I apologize, but I encountered an error: {str(e)}"
+
+    async def _collect_graph_response(
+        self,
+        graph,
+        initial_state: dict,
+        config: dict
+    ) -> tuple[str, list[dict[str, Any]]]:
+        """
+        Collect complete response from graph execution with tool events.
+
+        Args:
+            graph: Compiled LangGraph
+            initial_state: Initial state with messages
+            config: Configuration with thread_id
+
+        Returns:
+            Tuple of (final_text, tool_events) where:
+            - final_text: Complete AI response text
+            - tool_events: List of tool event dicts with name, input, output
+        """
+        final_text_chunks: list[str] = []
+        tool_events: list[dict[str, Any]] = []
+
+        async for event in graph.astream_events(
+            initial_state,
+            config=config,
+            version="v2"
+        ):
+            match event["event"]:
+                case "on_chat_model_stream":
+                    chunk = event["data"]["chunk"]
+                    if hasattr(chunk, "content") and chunk.content:
+                        final_text_chunks.append(chunk.content)
+
+                case "on_tool_start":
+                    tool_name = event.get("name", "")
+                    tool_input = event.get("data", {}).get("input", {})
+                    logger.info(f"Tool started: {tool_name}")
+                    # Start tracking this tool call
+                    tool_events.append({
+                        "name": tool_name,
+                        "input": tool_input,
+                        "output": None  # Will be filled on_tool_end
+                    })
+
+                case "on_tool_end":
+                    tool_name = event.get("name", "")
+                    tool_output = event.get("data", {}).get("output", {})
+                    logger.info(f"Tool completed: {tool_name}")
+                    # Find and update the matching tool event (reversed to get most recent)
+                    for te in reversed(tool_events):
+                        if te["name"] == tool_name and te["output"] is None:
+                            te["output"] = tool_output
+                            break
+
+        return "".join(final_text_chunks), tool_events
+
+    async def run_chat(
+        self,
+        user_message: str,
+        account_id: int,
+        db,
+        thread_id: Optional[int] = None
+    ) -> tuple[str, list[dict[str, Any]]]:
+        """
+        Execute chat and return complete response with tool events.
+        Non-streaming alternative to stream_chat for voice mode.
+
+        Args:
+            user_message: User's message
+            account_id: Authenticated user's account ID
+            db: Database session
+            thread_id: Optional conversation thread ID
+
+        Returns:
+            Tuple of (final_text, tool_events) where:
+            - final_text: Complete AI response text
+            - tool_events: List of {"name": str, "input": Any, "output": Any}
+        """
+        try:
+            # Prepare common chat context
+            workflow, initial_state, config, actual_thread_id = await self._prepare_chat_context(
+                user_message, account_id, db, thread_id
+            )
+
+            # Create and use async checkpointer
+            async with AsyncPostgresSaver.from_conn_string(self.postgres_url) as checkpointer:
+                graph = workflow.compile(checkpointer=checkpointer)
+
+                logger.info(
+                    f"Running chat for account {account_id} on thread {actual_thread_id}: {user_message[:100]}"
+                )
+
+                # Collect complete response with tool events
+                return await self._collect_graph_response(graph, initial_state, config)
+
+        except Exception as e:
+            logger.error(f"Error in run_chat: {str(e)}", exc_info=True)
+            return f"I apologize, but I encountered an error: {str(e)}", []
