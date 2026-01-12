@@ -1,5 +1,7 @@
 """Application configuration using Pydantic settings."""
-from typing import List
+from typing import List, Union
+import json
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,7 +26,18 @@ class Settings(BaseSettings):
     debug: bool = True
     
     # CORS
-    cors_origins: List[str] = ["http://localhost:3000", "http://localhost:4200"]
+    cors_origins: List[str] = ["http://localhost:3000", "http://localhost:4200", "http://localhost:8081"]
+    
+    @field_validator('cors_origins', mode='before')
+    @classmethod
+    def parse_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+        """Parse CORS origins from JSON string or list."""
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return [v]
+        return v
     
     # Logging
     log_level: str = "INFO"

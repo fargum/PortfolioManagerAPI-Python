@@ -1,7 +1,7 @@
 """Main FastAPI application."""
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
@@ -40,6 +40,7 @@ app = FastAPI(
 )
 
 # Configure CORS
+logger.info(f"Configuring CORS with origins: {settings.cors_origins}")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -47,6 +48,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+logger.info("CORS middleware configured")
+
+# Add request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all incoming requests with CORS headers."""
+    origin = request.headers.get("origin", "No origin header")
+    logger.info(f"Request: {request.method} {request.url.path} from origin: {origin}")
+    response = await call_next(request)
+    logger.info(f"Response headers: {dict(response.headers)}")
+    return response
 
 # Global exception handler
 @app.exception_handler(Exception)
