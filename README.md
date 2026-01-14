@@ -18,7 +18,8 @@ to do:
 - **SQLAlchemy** - Async ORM for PostgreSQL database access
 - **Pydantic** - Data validation and settings management
 - **Service Layer** - Business logic with direct database access
-- **LangChain/LangGraph** - AI agent functionality
+- **LangChain/LangGraph** - AI agent functionality with ReAct pattern and conversation memory
+- **OpenTelemetry Observability** - Comprehensive tracing, metrics, and logging
 
 ## Project Structure
 
@@ -218,6 +219,120 @@ The API will be available at:
 - **Interactive Docs (Swagger)**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
 - **PostgreSQL**: localhost:5432
+- **Aspire Dashboard** (telemetry): http://localhost:18888
+
+## Observability & Telemetry
+
+The API includes comprehensive OpenTelemetry instrumentation for distributed tracing, metrics, and structured logging. This matches the observability capabilities of the C# implementation.
+
+### What's Instrumented
+
+**Distributed Tracing:**
+- HTTP requests (FastAPI auto-instrumentation)
+- LLM invocations with token usage and tool call tracking
+- Agent graph execution and workflow steps
+- Tool executions with duration and status
+- Database operations (via manual spans in business logic)
+- External API calls (HTTPX auto-instrumentation)
+
+**Business Metrics:**
+- Holdings operations (CRUD + duration histograms)
+- AI chat requests by mode (UI/voice) and model
+- LLM token usage (prompt/completion tokens)
+- Tool execution counts and duration
+- Price quote requests
+
+**Structured Logging:**
+- JSON-formatted logs with UTC timestamps (production)
+- Human-readable logs (development)
+- Automatic trace context injection in logs
+
+### Local Development Setup
+
+When running in development mode with Docker Compose, the **.NET Aspire Dashboard** provides a beautiful UI for viewing telemetry data:
+
+1. **Start the development stack:**
+   ```powershell
+   docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+   ```
+
+2. **Access Aspire Dashboard:**
+   - Open http://localhost:18888 in your browser
+   - View traces, metrics, and logs in real-time
+   - No authentication required for local development
+
+3. **Environment variables (in docker-compose.dev.yml):**
+   ```yaml
+   OTLP_ENDPOINT: http://aspire-dashboard:18889
+   OTEL_SERVICE_NAME: PortfolioManager.PythonAPI
+   OTEL_SERVICE_VERSION: "1.0.0"
+   ```
+
+### Production Configuration
+
+For production deployments (e.g., Azure Container Apps), configure these environment variables:
+
+```env
+# Primary endpoint (Azure Container Apps standard)
+OTEL_EXPORTER_OTLP_ENDPOINT=https://your-otlp-collector:4318
+
+# Or use legacy endpoint
+OTLP_ENDPOINT=https://your-otlp-collector:4318
+
+# Service identification
+OTEL_SERVICE_NAME=PortfolioManager.PythonAPI
+OTEL_SERVICE_VERSION=1.0.0
+
+# Azure Application Insights (optional, for production monitoring)
+APPLICATIONINSIGHTS_CONNECTION_STRING=InstrumentationKey=...;IngestionEndpoint=...
+```
+
+**Endpoint Resolution Hierarchy:**
+1. `OTEL_EXPORTER_OTLP_ENDPOINT` (Azure Container Apps standard)
+2. `OTLP_ENDPOINT` (backward compatibility)
+3. `http://host.docker.internal:18889` (development default)
+
+### Example Trace Spans
+
+When a user asks "What stocks do I own?", you'll see traces like:
+
+```
+AgentStreamChat (parent span)
+  └─ AgentGraphExecution
+      ├─ LLMInvocation
+      │   └─ Attributes: model, tokens, duration, tool_calls
+      ├─ ToolExecution:get_portfolio_holdings
+      │   └─ Attributes: input, output_preview, duration
+      └─ LLMInvocation (with tool results)
+          └─ Attributes: response_length, duration
+```
+
+### Custom Metrics Available
+
+Query these metrics in your monitoring tool:
+
+- `holdings_requests_total` - Total holdings API requests
+- `holdings_request_duration_seconds` - Holdings request latency
+- `ai_chat_requests_total` - AI chat requests by mode
+- `ai_chat_request_duration_seconds` - AI chat latency
+- `llm_requests_total` - LLM API calls with status
+- `llm_request_duration_seconds` - LLM API latency
+- `llm_tokens_total` - Token usage (prompt/completion)
+- `tool_executions_total` - Tool calls by name and status
+- `tool_execution_duration_seconds` - Tool execution time
+
+### Implementation Details
+
+Telemetry is initialized in `src/core/telemetry.py` and automatically configured at startup in `src/api/main.py`. Key components:
+
+- **TracerProvider**: OTLP span exporter with batch processing
+- **MeterProvider**: OTLP metric exporter (60s export interval)
+- **LoggerProvider**: OTLP log exporter with structured JSON format
+- **Auto-instrumentation**: FastAPI, HTTPX, and Python logging
+- **Custom spans**: Manual instrumentation in routes and services
+- **Business metrics**: Domain-specific counters and histograms
+
+No code changes required to get basic observability - it's configured automatically based on environment variables.
 
 ## API Endpoints
 
