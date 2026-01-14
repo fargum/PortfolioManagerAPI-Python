@@ -13,4 +13,25 @@ services:
     environment:
       DEBUG: "True"
       LOG_LEVEL: DEBUG
+      # OpenTelemetry configuration for development
+      OTLP_ENDPOINT: http://aspire-dashboard:18889
+      OTEL_SERVICE_NAME: PortfolioManager.PythonAPI
+      OTEL_SERVICE_VERSION: "1.0.0"
     command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - aspire-dashboard
+
+  # Aspire Dashboard for local telemetry visualization
+  # Dashboard UI: http://localhost:18888
+  # OTLP Endpoint: http://localhost:18889
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:9.0
+    container_name: portfolio-python-aspire-dashboard
+    ports:
+      - "18888:18888"  # Dashboard UI
+      - "18889:18889"  # OTLP endpoint
+    environment:
+      - DOTNET_DASHBOARD_OTLP_ENDPOINT_URL=http://+:18889
+      - DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS=true
+      - DOTNET_DASHBOARD_FRONTEND_URL=http://+:18888
+    restart: unless-stopped

@@ -56,6 +56,33 @@ class Settings(BaseSettings):
     # Voice mode settings
     enable_voice_debug: bool = False
 
+    # OpenTelemetry Configuration
+    # Endpoint resolution priority:
+    # 1. OTEL_EXPORTER_OTLP_ENDPOINT - Azure Container Apps standard (production)
+    # 2. OTLP_ENDPOINT - Custom configuration (backward compatibility)
+    # 3. Default: http://host.docker.internal:18889 (development)
+    otel_exporter_otlp_endpoint: str = ""
+    otlp_endpoint: str = ""
+    otel_service_name: str = "PortfolioManager.PythonAPI"
+    otel_service_version: str = "1.0.0"
+
+    # Azure Application Insights (production)
+    applicationinsights_connection_string: str = ""
+
+    @property
+    def resolved_otlp_endpoint(self) -> str:
+        """Resolve OTLP endpoint with fallback hierarchy."""
+        if self.otel_exporter_otlp_endpoint:
+            return self.otel_exporter_otlp_endpoint
+        if self.otlp_endpoint:
+            return self.otlp_endpoint
+        return "http://host.docker.internal:18889"
+
+    @property
+    def is_azure_monitor_configured(self) -> bool:
+        """Check if Azure Application Insights is configured."""
+        return bool(self.applicationinsights_connection_string)
+
     @property
     def async_database_url(self) -> str:
         """Convert postgresql:// to postgresql+asyncpg:// for async operations."""

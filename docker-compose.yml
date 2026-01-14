@@ -25,6 +25,16 @@ services:
       DEBUG: ${DEBUG:-False}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000","http://localhost:8080"]}
+
+      # OpenTelemetry Configuration
+      # For Azure Container Apps, OTEL_EXPORTER_OTLP_ENDPOINT is auto-set
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTLP_ENDPOINT: ${OTLP_ENDPOINT:-}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-PortfolioManager.PythonAPI}
+      OTEL_SERVICE_VERSION: ${OTEL_SERVICE_VERSION:-1.0.0}
+
+      # Azure Application Insights (production)
+      APPLICATIONINSIGHTS_CONNECTION_STRING: ${APPLICATIONINSIGHTS_CONNECTION_STRING:-}
     ports:
       - "${API_PORT:-8000}:8000"
     healthcheck:

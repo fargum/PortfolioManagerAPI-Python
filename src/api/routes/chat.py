@@ -11,11 +11,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from src.core.ai_config import AIConfig
 from src.core.config import Settings
 from src.core.config import settings as app_settings
+from src.core.telemetry import get_tracer
 from src.db.session import get_db
 from src.schemas.voice import UIResponse, VoiceResponse
 from src.services.ai.agent_prompt_service import AgentPromptService
 from src.services.ai.langgraph_agent_service import LangGraphAgentService
 from src.services.ai.voice_adapter import VoiceResponseAdapter
+from src.services.metrics_service import MetricsService, get_metrics_service
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +123,8 @@ async def health_check(ai_config: AIConfig = Depends(get_ai_config)):
 async def stream_chat(
     request: ChatRequest,
     agent_service: LangGraphAgentService = Depends(get_agent_service),
-    db = Depends(get_db)
+    db = Depends(get_db),
+    metrics: MetricsService = Depends(get_metrics_service)
 ):
     """
     Stream AI chat response for user query with LangGraph agent and tool calling.
@@ -149,48 +152,72 @@ async def stream_chat(
             "account_id": 123
         }
     """
-    try:
-        logger.info(
-            f"Streaming LangGraph agent for account {request.account_id}, "
-            f"query: {request.query[:50]}..."
-        )
+    tracer = get_tracer()
 
-        # Stream response using LangGraph agent with conversation memory
-        async def generate() -> AsyncIterator[str]:
-            """Generate streaming response."""
-            try:
-                async for token in agent_service.stream_chat(
-                    user_message=request.query,
-                    account_id=request.account_id,  # Injected from auth context, not from AI
-                    db=db,  # Database session for this request
-                    thread_id=request.thread_id  # Optional thread ID for conversation continuity
-                ):
-                    # Send token as Server-Sent Event
-                    yield f"data: {token}\n\n"
+    with tracer.start_as_current_span("StreamChat") as span:
+        span.set_attribute("account.id", request.account_id)
+        span.set_attribute("mode", "stream")
+        span.set_attribute("query.length", len(request.query))
 
-                # Send completion signal
-                yield "data: [DONE]\n\n"
+        try:
+            logger.info(
+                f"Streaming LangGraph agent for account {request.account_id}, "
+                f"query: {request.query[:50]}..."
+            )
 
-            except Exception as e:
-                logger.error(f"Error during streaming: {e}", exc_info=True)
-                yield f"data: [ERROR: {str(e)}]\n\n"
+            metrics.increment_ai_chat_requests(request.account_id, "stream", "requested")
+            start_time = time.perf_counter()
 
-        return StreamingResponse(
-            generate(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no"  # Disable nginx buffering
-            }
-        )
+            # Stream response using LangGraph agent with conversation memory
+            async def generate() -> AsyncIterator[str]:
+                """Generate streaming response."""
+                try:
+                    async for token in agent_service.stream_chat(
+                        user_message=request.query,
+                        account_id=request.account_id,  # Injected from auth context, not from AI
+                        db=db,  # Database session for this request
+                        thread_id=request.thread_id  # Optional thread ID for conversation continuity
+                    ):
+                        # Send token as Server-Sent Event
+                        yield f"data: {token}\n\n"
 
-    except Exception as e:
-        logger.error(f"Error in stream_chat: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing chat request: {str(e)}"
-        )
+                    # Send completion signal
+                    yield "data: [DONE]\n\n"
+
+                    # Record success metrics
+                    duration = time.perf_counter() - start_time
+                    metrics.record_ai_chat_request_duration(
+                        duration, request.account_id, "stream",
+                        agent_service.ai_config.azure_openai_deployment_name, "success"
+                    )
+
+                except Exception as e:
+                    logger.error(f"Error during streaming: {e}", exc_info=True)
+                    duration = time.perf_counter() - start_time
+                    metrics.record_ai_chat_request_duration(
+                        duration, request.account_id, "stream",
+                        agent_service.ai_config.azure_openai_deployment_name, "error"
+                    )
+                    yield f"data: [ERROR: {str(e)}]\n\n"
+
+            return StreamingResponse(
+                generate(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no"  # Disable nginx buffering
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Error in stream_chat: {e}", exc_info=True)
+            span.set_attribute("error", True)
+            span.record_exception(e)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error processing chat request: {str(e)}"
+            )
 
 
 @router.post("/respond", response_model=Union[UIResponse, VoiceResponse])
@@ -199,6 +226,7 @@ async def respond_chat(
     agent_service: LangGraphAgentService = Depends(get_agent_service),
     settings: Settings = Depends(get_settings),
     db=Depends(get_db),
+    metrics: MetricsService = Depends(get_metrics_service),
 ):
     """
     Non-streaming chat response endpoint with mode support.
@@ -222,45 +250,61 @@ async def respond_chat(
             "maxSpeakWords": 100
         }
     """
-    try:
-        start_time = time.perf_counter()
+    tracer = get_tracer()
 
-        logger.info(
-            f"Respond chat for account {request.account_id}, "
-            f"mode: {request.mode}, query: {request.query[:50]}..."
-        )
+    with tracer.start_as_current_span("RespondChat") as span:
+        span.set_attribute("account.id", request.account_id)
+        span.set_attribute("mode", request.mode)
+        span.set_attribute("query.length", len(request.query))
 
-        # Execute non-streaming chat with tool event capture
-        # Use voice_mode=True for voice requests to get structured response
-        final_text, tool_events = await agent_service.run_chat(
-            user_message=request.query,
-            account_id=request.account_id,
-            db=db,
-            thread_id=request.thread_id,
-            voice_mode=(request.mode == "voice"),
-        )
+        with metrics.track_ai_chat_request(
+            request.account_id,
+            request.mode,
+            agent_service.ai_config.azure_openai_deployment_name
+        ):
+            try:
+                start_time = time.perf_counter()
 
-        latency_ms = int((time.perf_counter() - start_time) * 1000)
+                logger.info(
+                    f"Respond chat for account {request.account_id}, "
+                    f"mode: {request.mode}, query: {request.query[:50]}..."
+                )
 
-        if request.mode == "ui":
-            return UIResponse(answer=final_text)
+                # Execute non-streaming chat with tool event capture
+                # Use voice_mode=True for voice requests to get structured response
+                final_text, tool_events = await agent_service.run_chat(
+                    user_message=request.query,
+                    account_id=request.account_id,
+                    db=db,
+                    thread_id=request.thread_id,
+                    voice_mode=(request.mode == "voice"),
+                )
 
-        # Voice mode: use adapter to build response
-        adapter = VoiceResponseAdapter(
-            final_text=final_text,
-            tool_events=tool_events,
-            query=request.query,
-            max_speak_words=request.max_speak_words,
-            model_name=agent_service.ai_config.azure_openai_deployment_name,
-            latency_ms=latency_ms,
-            include_telemetry=settings.enable_voice_debug,
-        )
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                span.set_attribute("latency.ms", latency_ms)
+                span.set_attribute("response.length", len(final_text))
 
-        return adapter.build()
+                if request.mode == "ui":
+                    return UIResponse(answer=final_text)
 
-    except Exception as e:
-        logger.error(f"Error in respond_chat: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing chat request: {str(e)}",
-        )
+                # Voice mode: use adapter to build response
+                adapter = VoiceResponseAdapter(
+                    final_text=final_text,
+                    tool_events=tool_events,
+                    query=request.query,
+                    max_speak_words=request.max_speak_words,
+                    model_name=agent_service.ai_config.azure_openai_deployment_name,
+                    latency_ms=latency_ms,
+                    include_telemetry=settings.enable_voice_debug,
+                )
+
+                return adapter.build()
+
+            except Exception as e:
+                logger.error(f"Error in respond_chat: {e}", exc_info=True)
+                span.set_attribute("error", True)
+                span.record_exception(e)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Error processing chat request: {str(e)}",
+                )

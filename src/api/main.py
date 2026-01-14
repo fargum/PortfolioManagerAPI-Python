@@ -1,20 +1,67 @@
 """Main FastAPI application."""
 import logging
+import sys
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from src.core.config import settings
+from src.api.routes import chat, holdings
 from src.core.ai_config import AIConfig
-from src.api.routes import holdings, chat
+from src.core.config import settings
+from src.core.telemetry import configure_telemetry, instrument_app
 from src.db.session import AsyncSessionLocal
 
-# Configure logging
-logging.basicConfig(
-    level=settings.log_level,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+
+class UTCJsonFormatter(logging.Formatter):
+    """Structured JSON formatter with UTC timestamps matching C# API format."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        import json
+        log_entry = {
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            log_entry["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log_entry)
+
+
+def configure_logging() -> None:
+    """Configure structured logging with JSON format."""
+    root_logger = logging.getLogger()
+    root_logger.setLevel(settings.log_level)
+
+    # Clear existing handlers
+    root_logger.handlers.clear()
+
+    # Console handler with JSON formatting
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(settings.log_level)
+
+    if settings.debug:
+        # Human-readable format for development
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+    else:
+        # JSON format for production
+        formatter = UTCJsonFormatter()
+
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
+
+
+# Configure logging first
+configure_logging()
+
+# Configure OpenTelemetry
+configure_telemetry()
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,11 +69,15 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Lifecycle manager for startup and shutdown events."""
     # Startup
-    logger.info("Starting Portfolio Manager API...")
+    logger.info("Starting Portfolio Manager Python API...")
     logger.info(f"Environment: {'Development' if settings.debug else 'Production'}")
+    logger.info(f"Service: {settings.otel_service_name} v{settings.otel_service_version}")
+    logger.info(f"OTLP Endpoint: {settings.resolved_otlp_endpoint}")
+    if settings.is_azure_monitor_configured:
+        logger.info("Azure Application Insights: Configured")
     yield
     # Shutdown
-    logger.info("Shutting down Portfolio Manager API...")
+    logger.info("Shutting down Portfolio Manager Python API...")
 
 
 # Create FastAPI app
@@ -38,6 +89,9 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan
 )
+
+# Instrument FastAPI with OpenTelemetry
+instrument_app(app)
 
 # Configure CORS
 logger.info(f"Configuring CORS with origins: {settings.cors_origins}")
@@ -82,8 +136,8 @@ async def root():
     """Root endpoint - basic service info."""
     return {
         "status": "healthy",
-        "service": "Portfolio Manager API",
-        "version": "0.1.0"
+        "service": settings.otel_service_name,
+        "version": settings.otel_service_version
     }
 
 
@@ -91,20 +145,20 @@ async def root():
 async def health_check():
     """
     Comprehensive health check endpoint.
-    
+
     Verifies:
     - Database connectivity (executes SELECT 1)
     - AI configuration status (Azure AI Foundry)
-    
+
     Returns 200 if all systems operational, 503 if critical services unavailable.
     """
     health_status = {
         "status": "healthy",
-        "service": "Portfolio Manager API",
-        "version": "0.1.0",
+        "service": settings.otel_service_name,
+        "version": settings.otel_service_version,
         "checks": {}
     }
-    
+
     # Check database connectivity
     try:
         async with AsyncSessionLocal() as session:
@@ -121,7 +175,7 @@ async def health_check():
             "status": "unhealthy",
             "message": f"Connection failed: {str(e)}"
         }
-    
+
     # Check AI configuration
     try:
         ai_config = AIConfig()
@@ -137,19 +191,26 @@ async def health_check():
             "status": "error",
             "message": f"Configuration error: {str(e)}"
         }
-    
+
+    # Check telemetry configuration
+    health_status["checks"]["telemetry"] = {
+        "status": "configured",
+        "otlp_endpoint": settings.resolved_otlp_endpoint,
+        "azure_monitor": "configured" if settings.is_azure_monitor_configured else "not_configured"
+    }
+
     # Return 503 if critical services (database) are down
     from fastapi import status
     from fastapi.responses import JSONResponse
-    
+
     status_code = status.HTTP_200_OK if health_status["status"] == "healthy" else status.HTTP_503_SERVICE_UNAVAILABLE
-    
+
     return JSONResponse(content=health_status, status_code=status_code)
 
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "src.api.main:app",
         host=settings.api_host,
