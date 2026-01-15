@@ -10,6 +10,7 @@ from sqlalchemy import text
 
 from src.api.routes import chat, holdings
 from src.core.ai_config import AIConfig
+from src.core.auth import get_azure_scheme
 from src.core.config import settings
 from src.core.telemetry import configure_telemetry, instrument_app
 from src.db.session import AsyncSessionLocal
@@ -75,6 +76,15 @@ async def lifespan(app: FastAPI):
     logger.info(f"OTLP Endpoint: {settings.resolved_otlp_endpoint}")
     if settings.is_azure_monitor_configured:
         logger.info("Azure Application Insights: Configured")
+
+    # Initialize Azure AD authentication
+    azure_scheme = get_azure_scheme()
+    if azure_scheme:
+        await azure_scheme.openid_config.load_config()
+        logger.info("Azure AD authentication: Initialized")
+    else:
+        logger.warning("Azure AD authentication: Not configured (API running without auth)")
+
     yield
     # Shutdown
     logger.info("Shutting down Portfolio Manager Python API...")
@@ -197,6 +207,12 @@ async def health_check():
         "status": "configured",
         "otlp_endpoint": settings.resolved_otlp_endpoint,
         "azure_monitor": "configured" if settings.is_azure_monitor_configured else "not_configured"
+    }
+
+    # Check Azure AD authentication configuration
+    health_status["checks"]["authentication"] = {
+        "status": "configured" if settings.is_azure_ad_configured else "not_configured",
+        "message": "Azure AD" if settings.is_azure_ad_configured else "Authentication disabled"
     }
 
     # Return 503 if critical services (database) are down

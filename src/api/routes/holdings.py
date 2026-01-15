@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.auth import get_current_account_id
 from src.core.config import settings
 from src.core.telemetry import get_tracer
 from src.db.session import get_db
@@ -61,14 +62,6 @@ def get_holding_service(
 ) -> HoldingService:
     """Dependency to get HoldingService instance."""
     return HoldingService(db, eod_tool, pricing_service)
-
-
-async def get_current_account_id() -> int:
-    """
-    Placeholder for authentication - gets current account ID.
-    TODO: Replace with actual authentication logic.
-    """
-    return 1  # Hardcoded for now, replace with actual auth
 
 
 @router.get("/date/{valuation_date}", response_model=AccountHoldingsResponse)

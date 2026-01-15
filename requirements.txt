@@ -4,6 +4,9 @@ uvicorn[standard]==0.38.0
 pydantic==2.12.5
 pydantic-settings==2.12.0
 
+# Azure AD Authentication
+fastapi-azure-auth==5.0.0
+
 # Database
 sqlalchemy==2.0.44
 asyncpg==0.31.0
