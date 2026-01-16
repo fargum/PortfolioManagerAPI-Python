@@ -6,9 +6,10 @@ Leverages PostgresSaver checkpointer for conversation state management.
 import json
 import logging
 import time
-from typing import Any, AsyncIterator, Literal, Optional
+from typing import Any, AsyncIterator, List, Literal, Optional
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.tools import BaseTool
 from langchain_openai import AzureChatOpenAI
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, MessagesState, StateGraph
@@ -19,29 +20,14 @@ from src.core.config import Settings
 from src.core.telemetry import get_tracer
 from src.services.ai.agent_prompt_service import AgentPromptService
 from src.services.ai.portfolio_analysis_service import PortfolioAnalysisService
-from src.services.ai.tools.market_intelligence_tool import (
-    get_market_context,
-    get_market_sentiment,
-    initialize_market_intelligence_tool,
-)
-from src.services.ai.tools.portfolio_analysis_tool import (
-    analyze_portfolio_performance,
-    initialize_analysis_tool,
-)
-from src.services.ai.tools.portfolio_comparison_tool import (
-    compare_portfolio_performance,
-    initialize_comparison_tool,
-)
 
-# Import LangChain tools
-from src.services.ai.tools.portfolio_holdings_tool import (
-    get_portfolio_holdings,
-    initialize_holdings_tool,
-)
-from src.services.ai.tools.real_time_prices_tool import (
-    get_real_time_prices,
-    initialize_real_time_prices_tool,
-)
+# Import tool factory functions (per-request tool creation to avoid race conditions)
+from src.services.ai.tools.market_intelligence_tool import create_market_intelligence_tools
+from src.services.ai.tools.portfolio_analysis_tool import create_portfolio_analysis_tool
+from src.services.ai.tools.portfolio_comparison_tool import create_portfolio_comparison_tool
+from src.services.ai.tools.portfolio_holdings_tool import create_portfolio_holdings_tool
+from src.services.ai.tools.real_time_prices_tool import create_real_time_prices_tool
+
 from src.services.conversation_thread_service import ConversationThreadService
 from src.services.currency_conversion_service import CurrencyConversionService
 from src.services.eod_market_data_tool import EodMarketDataTool
@@ -118,45 +104,48 @@ class LangGraphAgentService:
                 f"Check database connection and permissions."
             ) from e
 
-    def _initialize_tools_for_account(
+    def _create_tools_for_request(
         self,
         account_id: int,
         holding_service: HoldingService,
         portfolio_analysis_service: PortfolioAnalysisService
-    ):
+    ) -> List[BaseTool]:
         """
-        Initialize tools with account context and database-backed services.
+        Create tools with account context and database-backed services.
+        
+        Uses factory pattern to create new tool instances per-request, avoiding
+        global state race conditions that could cause cross-account data leakage.
+        
         Security: account_id is injected from authenticated request, not from AI.
 
         Args:
             account_id: Authenticated user's account ID
             holding_service: Service for accessing holding data (with DB session)
             portfolio_analysis_service: Service for portfolio analysis (with DB session)
+            
+        Returns:
+            List of tools configured for this specific request context
         """
-        initialize_holdings_tool(holding_service, account_id)
-        initialize_analysis_tool(portfolio_analysis_service, account_id)
-        initialize_comparison_tool(portfolio_analysis_service, account_id)
-
-        # Initialize real-time prices and market intelligence tools with EOD market data tool
-        if holding_service.eod_tool:
-            initialize_real_time_prices_tool(holding_service.eod_tool)
-            initialize_market_intelligence_tool(holding_service.eod_tool)
-            logger.info(f"Real-time prices and market intelligence tools initialized for account {account_id}")
+        tools: List[BaseTool] = []
+        
+        # Create portfolio tools with bound account context
+        tools.append(create_portfolio_holdings_tool(holding_service, account_id))
+        tools.append(create_portfolio_analysis_tool(portfolio_analysis_service, account_id))
+        tools.append(create_portfolio_comparison_tool(portfolio_analysis_service, account_id))
+        
+        # Create market intelligence and real-time pricing tools with EOD tool
+        eod_tool = holding_service.eod_tool
+        market_context_tool, market_sentiment_tool = create_market_intelligence_tools(eod_tool)
+        tools.append(market_context_tool)
+        tools.append(market_sentiment_tool)
+        tools.append(create_real_time_prices_tool(eod_tool))
+        
+        if eod_tool:
+            logger.info(f"Created {len(tools)} tools (including real-time prices and market intelligence) for account {account_id}")
         else:
-            logger.warning(f"EOD tool not available for account {account_id}, real-time prices and market intelligence tools not initialized")
-
-        logger.info(f"Tools initialized for account {account_id}")
-
-    def _get_portfolio_tools(self):
-        """Get list of portfolio tools for the agent."""
-        return [
-            get_portfolio_holdings,
-            analyze_portfolio_performance,
-            compare_portfolio_performance,
-            get_market_context,
-            get_market_sentiment,
-            get_real_time_prices
-        ]
+            logger.warning(f"Created {len(tools)} tools for account {account_id} (EOD tool not available)")
+        
+        return tools
 
     def _create_agent_node(self, model_with_tools, system_prompt: str):
         """
@@ -481,8 +470,11 @@ class LangGraphAgentService:
         """
         Prepare common context for chat operations.
 
-        Sets up services, initializes tools, creates/retrieves conversation thread,
+        Sets up services, creates per-request tools, creates/retrieves conversation thread,
         and builds the graph workflow.
+        
+        IMPORTANT: Tools are created per-request using factory functions to avoid
+        global state race conditions that could cause cross-account data leakage.
 
         Args:
             user_message: User's message
@@ -516,8 +508,8 @@ class LangGraphAgentService:
         portfolio_analysis_service = PortfolioAnalysisService(holding_service)
         conversation_thread_service = ConversationThreadService(db)
 
-        # Initialize tools with account context
-        self._initialize_tools_for_account(
+        # Create tools per-request with bound account context (avoids race conditions)
+        tools = self._create_tools_for_request(
             account_id,
             holding_service,
             portfolio_analysis_service
@@ -532,7 +524,6 @@ class LangGraphAgentService:
         logger.info(f"Using conversation thread {thread.id} for account {account_id}")
 
         # Build graph components - use voice mode prompt if requested
-        tools = self._get_portfolio_tools()
         if voice_mode:
             system_prompt = self.agent_prompt_service.get_voice_mode_prompt(account_id)
         else:

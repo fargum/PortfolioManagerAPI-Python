@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.core.ai_config import AIConfig
+from src.core.auth import get_current_account_id
 from src.core.config import Settings
 from src.core.config import settings as app_settings
 from src.core.telemetry import get_tracer
@@ -29,7 +30,6 @@ class ChatRequest(BaseModel):
     """Chat request from client."""
 
     query: str = Field(..., description="User's question or message")
-    account_id: int = Field(..., description="Account ID for personalized responses")
     thread_id: Optional[int] = Field(
         None, description="Conversation thread ID for multi-turn chat"
     )
@@ -122,6 +122,7 @@ async def health_check(ai_config: AIConfig = Depends(get_ai_config)):
 @router.post("/stream")
 async def stream_chat(
     request: ChatRequest,
+    account_id: int = Depends(get_current_account_id),
     agent_service: LangGraphAgentService = Depends(get_agent_service),
     db = Depends(get_db),
     metrics: MetricsService = Depends(get_metrics_service)
@@ -155,17 +156,17 @@ async def stream_chat(
     tracer = get_tracer()
 
     with tracer.start_as_current_span("StreamChat") as span:
-        span.set_attribute("account.id", request.account_id)
+        span.set_attribute("account.id", account_id)
         span.set_attribute("mode", "stream")
         span.set_attribute("query.length", len(request.query))
 
         try:
             logger.info(
-                f"Streaming LangGraph agent for account {request.account_id}, "
+                f"Streaming LangGraph agent for account {account_id}, "
                 f"query: {request.query[:50]}..."
             )
 
-            metrics.increment_ai_chat_requests(request.account_id, "stream", "requested")
+            metrics.increment_ai_chat_requests(account_id, "stream", "requested")
             start_time = time.perf_counter()
 
             # Stream response using LangGraph agent with conversation memory
@@ -174,7 +175,7 @@ async def stream_chat(
                 try:
                     async for token in agent_service.stream_chat(
                         user_message=request.query,
-                        account_id=request.account_id,  # Injected from auth context, not from AI
+                        account_id=account_id,
                         db=db,  # Database session for this request
                         thread_id=request.thread_id  # Optional thread ID for conversation continuity
                     ):
@@ -187,7 +188,7 @@ async def stream_chat(
                     # Record success metrics
                     duration = time.perf_counter() - start_time
                     metrics.record_ai_chat_request_duration(
-                        duration, request.account_id, "stream",
+                        duration, account_id, "stream",
                         agent_service.ai_config.azure_openai_deployment_name, "success"
                     )
 
@@ -195,7 +196,7 @@ async def stream_chat(
                     logger.error(f"Error during streaming: {e}", exc_info=True)
                     duration = time.perf_counter() - start_time
                     metrics.record_ai_chat_request_duration(
-                        duration, request.account_id, "stream",
+                        duration, account_id, "stream",
                         agent_service.ai_config.azure_openai_deployment_name, "error"
                     )
                     yield f"data: [ERROR: {str(e)}]\n\n"
@@ -223,6 +224,7 @@ async def stream_chat(
 @router.post("/respond", response_model=Union[UIResponse, VoiceResponse])
 async def respond_chat(
     request: ChatRequest,
+    account_id: int = Depends(get_current_account_id),
     agent_service: LangGraphAgentService = Depends(get_agent_service),
     settings: Settings = Depends(get_settings),
     db=Depends(get_db),
@@ -253,12 +255,12 @@ async def respond_chat(
     tracer = get_tracer()
 
     with tracer.start_as_current_span("RespondChat") as span:
-        span.set_attribute("account.id", request.account_id)
+        span.set_attribute("account.id", account_id)
         span.set_attribute("mode", request.mode)
         span.set_attribute("query.length", len(request.query))
 
         with metrics.track_ai_chat_request(
-            request.account_id,
+            account_id,
             request.mode,
             agent_service.ai_config.azure_openai_deployment_name
         ):
@@ -266,7 +268,7 @@ async def respond_chat(
                 start_time = time.perf_counter()
 
                 logger.info(
-                    f"Respond chat for account {request.account_id}, "
+                    f"Respond chat for account {account_id}, "
                     f"mode: {request.mode}, query: {request.query[:50]}..."
                 )
 
@@ -274,7 +276,7 @@ async def respond_chat(
                 # Use voice_mode=True for voice requests to get structured response
                 final_text, tool_events = await agent_service.run_chat(
                     user_message=request.query,
-                    account_id=request.account_id,
+                    account_id=account_id,
                     db=db,
                     thread_id=request.thread_id,
                     voice_mode=(request.mode == "voice"),
