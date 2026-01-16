@@ -48,9 +48,9 @@ class Settings(BaseSettings):
     eod_api_base_url: str = "https://eodhd.com/api"
     eod_api_timeout_seconds: int = 30
 
-    # Azure AI Foundry Configuration
-    azure_foundry_endpoint: str  # Required - no default (must be set in .env)
-    azure_foundry_api_key: str  # Required - no default (must be set in .env)
+    # Azure AI Foundry Configuration (optional - AI features disabled if not set)
+    azure_foundry_endpoint: str = ""  # Optional - AI features disabled if not set
+    azure_foundry_api_key: str = ""  # Optional - AI features disabled if not set
     azure_foundry_model_name: str = "gpt-4o-mini"
     azure_foundry_api_version: str = "2024-08-01-preview"
 

@@ -74,14 +74,21 @@ def get_settings() -> Settings:
 
 
 @lru_cache()
-def get_agent_service() -> LangGraphAgentService:
+def get_agent_service() -> Optional[LangGraphAgentService]:
     """
     Get configured LangGraph agent service with conversation memory (singleton).
+    Returns None if AI is not configured.
 
     Database session is passed per request when calling stream_chat methods.
     """
+    ai_config = get_ai_config()
+    
+    # Return None if AI is not configured - allows app to start without AI
+    if not ai_config.is_configured():
+        logger.warning("AI service not configured - Azure Foundry credentials not set")
+        return None
+    
     try:
-        ai_config = get_ai_config()
         prompt_service = get_prompt_service()
         settings = get_settings()
 
@@ -95,7 +102,22 @@ def get_agent_service() -> LangGraphAgentService:
         return agent_service
     except Exception as e:
         logger.error(f"Failed to initialize agent service: {e}", exc_info=True)
-        raise
+        return None
+
+
+def require_ai_service(
+    agent_service: Optional[LangGraphAgentService] = Depends(get_agent_service)
+) -> LangGraphAgentService:
+    """
+    Dependency that requires AI service to be configured.
+    Raises 503 Service Unavailable if AI is not configured.
+    """
+    if agent_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI service is not configured. Please set AZURE_FOUNDRY_ENDPOINT and AZURE_FOUNDRY_API_KEY environment variables."
+        )
+    return agent_service
 
 
 # Routes
@@ -123,7 +145,7 @@ async def health_check(ai_config: AIConfig = Depends(get_ai_config)):
 async def stream_chat(
     request: ChatRequest,
     account_id: int = Depends(get_current_account_id),
-    agent_service: LangGraphAgentService = Depends(get_agent_service),
+    agent_service: LangGraphAgentService = Depends(require_ai_service),
     db = Depends(get_db),
     metrics: MetricsService = Depends(get_metrics_service)
 ):
@@ -225,7 +247,7 @@ async def stream_chat(
 async def respond_chat(
     request: ChatRequest,
     account_id: int = Depends(get_current_account_id),
-    agent_service: LangGraphAgentService = Depends(get_agent_service),
+    agent_service: LangGraphAgentService = Depends(require_ai_service),
     settings: Settings = Depends(get_settings),
     db=Depends(get_db),
     metrics: MetricsService = Depends(get_metrics_service),
