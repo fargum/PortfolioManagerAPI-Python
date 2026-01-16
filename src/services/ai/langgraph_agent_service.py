@@ -339,7 +339,7 @@ class LangGraphAgentService:
 
         # Log available tools
         tool_names = [tool.name if hasattr(tool, 'name') else str(tool) for tool in tools]
-        logger.info(f"🔧 Binding {len(tools)} tools to model: {tool_names}")
+        logger.info(f"Binding {len(tools)} tools to model: {tool_names}")
 
         # Bind tools to model
         model_with_tools = self.model.bind_tools(tools)
