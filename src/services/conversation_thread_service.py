@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, desc
 from sqlalchemy.orm import selectinload
 
-from src.db.models.conversation_thread import ConversationThread, ChatMessage
+from src.db.models.conversation_thread import ConversationThread
 
 logger = logging.getLogger(__name__)
 
