@@ -2,10 +2,13 @@
 Unit tests for AI tools (portfolio_holdings_tool, portfolio_analysis_tool, etc.).
 
 Tests cover:
-- Tool initialization
+- Tool factory function creation
 - Tool execution with mock services
-- Error handling when tools not initialized
 - Response formatting
+- Error handling
+
+Note: Tools use factory pattern - each call to create_*_tool() returns a new
+StructuredTool instance with bound context, avoiding global state.
 """
 import pytest
 from datetime import date, datetime
@@ -13,7 +16,10 @@ from decimal import Decimal
 from unittest.mock import Mock, AsyncMock, patch
 
 from src.schemas.holding import PortfolioHoldingDto, AccountHoldingsResponse
-from src.services.ai.tools import portfolio_holdings_tool, portfolio_analysis_tool
+from src.services.ai.tools import (
+    create_portfolio_holdings_tool,
+    create_portfolio_analysis_tool,
+)
 from src.services.holding_service import HoldingService
 from src.services.ai.portfolio_analysis_service import PortfolioAnalysisService
 
@@ -70,25 +76,26 @@ def sample_holdings_response():
     )
 
 
-class TestPortfolioHoldingsToolInitialization:
-    """Test portfolio holdings tool initialization."""
+class TestPortfolioHoldingsToolFactory:
+    """Test portfolio holdings tool factory creation."""
     
     @pytest.mark.unit
-    def test_initialize_holdings_tool(self, mock_holding_service):
-        """Test that holdings tool can be initialized."""
-        portfolio_holdings_tool.initialize_holdings_tool(mock_holding_service, 100)
+    def test_create_holdings_tool_returns_structured_tool(self, mock_holding_service):
+        """Test that factory returns a StructuredTool."""
+        tool = create_portfolio_holdings_tool(mock_holding_service, 100)
         
-        assert portfolio_holdings_tool._holding_service is mock_holding_service
-        assert portfolio_holdings_tool._account_id == 100
+        assert tool is not None
+        assert tool.name == "get_portfolio_holdings"
+        assert "portfolio holdings" in tool.description.lower()
     
     @pytest.mark.unit
-    def test_initialize_with_different_account_ids(self, mock_holding_service):
-        """Test tool can be reinitialized with different account."""
-        portfolio_holdings_tool.initialize_holdings_tool(mock_holding_service, 100)
-        assert portfolio_holdings_tool._account_id == 100
+    def test_create_holdings_tool_with_different_accounts(self, mock_holding_service):
+        """Test factory creates separate tools for different accounts."""
+        tool1 = create_portfolio_holdings_tool(mock_holding_service, 100)
+        tool2 = create_portfolio_holdings_tool(mock_holding_service, 200)
         
-        portfolio_holdings_tool.initialize_holdings_tool(mock_holding_service, 200)
-        assert portfolio_holdings_tool._account_id == 200
+        # Each call creates a new independent tool instance
+        assert tool1 is not tool2
 
 
 class TestPortfolioHoldingsToolExecution:
@@ -100,11 +107,9 @@ class TestPortfolioHoldingsToolExecution:
     ):
         """Test that get_portfolio_holdings returns properly formatted response."""
         mock_holding_service.get_holdings_by_account_and_date_async.return_value = sample_holdings_response
-        portfolio_holdings_tool.initialize_holdings_tool(mock_holding_service, 100)
+        tool = create_portfolio_holdings_tool(mock_holding_service, 100)
         
-        result = await portfolio_holdings_tool.get_portfolio_holdings.ainvoke(
-            {"date": "2025-01-15"}
-        )
+        result = await tool.ainvoke({"date": "2025-01-15"})
         
         assert result["AccountId"] == 100
         assert result["TotalValue"] == 1500.00
@@ -117,29 +122,13 @@ class TestPortfolioHoldingsToolExecution:
     ):
         """Test that 'today' keyword is handled correctly."""
         mock_holding_service.get_holdings_by_account_and_date_async.return_value = sample_holdings_response
-        portfolio_holdings_tool.initialize_holdings_tool(mock_holding_service, 100)
+        tool = create_portfolio_holdings_tool(mock_holding_service, 100)
         
-        result = await portfolio_holdings_tool.get_portfolio_holdings.ainvoke(
-            {"date": "today"}
-        )
+        result = await tool.ainvoke({"date": "today"})
         
         # Should not raise error and return valid response
         assert "AccountId" in result
         assert "Error" not in result
-    
-    @pytest.mark.unit
-    async def test_get_holdings_not_initialized_returns_error(self):
-        """Test error when tool not initialized."""
-        # Reset global state
-        portfolio_holdings_tool._holding_service = None
-        portfolio_holdings_tool._account_id = None
-        
-        result = await portfolio_holdings_tool.get_portfolio_holdings.ainvoke(
-            {"date": "2025-01-15"}
-        )
-        
-        assert "Error" in result
-        assert "not initialized" in result["Error"]
     
     @pytest.mark.unit
     async def test_get_holdings_formats_holding_details(
@@ -147,29 +136,38 @@ class TestPortfolioHoldingsToolExecution:
     ):
         """Test that individual holding details are properly formatted."""
         mock_holding_service.get_holdings_by_account_and_date_async.return_value = sample_holdings_response
-        portfolio_holdings_tool.initialize_holdings_tool(mock_holding_service, 100)
+        tool = create_portfolio_holdings_tool(mock_holding_service, 100)
         
-        result = await portfolio_holdings_tool.get_portfolio_holdings.ainvoke(
-            {"date": "2025-01-15"}
-        )
+        result = await tool.ainvoke({"date": "2025-01-15"})
         
         holding = result["Holdings"][0]
         assert holding["Ticker"] == "AAPL"
         assert holding["InstrumentName"] == "Apple Inc."
         assert holding["CurrentValue"] == 1500.00
         assert holding["GainLoss"] == 500.00
-
-
-class TestPortfolioAnalysisToolInitialization:
-    """Test portfolio analysis tool initialization."""
     
     @pytest.mark.unit
-    def test_initialize_analysis_tool(self, mock_portfolio_analysis_service):
-        """Test that analysis tool can be initialized."""
-        portfolio_analysis_tool.initialize_analysis_tool(mock_portfolio_analysis_service, 100)
+    async def test_get_holdings_no_holdings_returns_error(self, mock_holding_service):
+        """Test response when no holdings found."""
+        mock_holding_service.get_holdings_by_account_and_date_async.return_value = None
+        tool = create_portfolio_holdings_tool(mock_holding_service, 100)
         
-        assert portfolio_analysis_tool._portfolio_analysis_service is mock_portfolio_analysis_service
-        assert portfolio_analysis_tool._account_id == 100
+        result = await tool.ainvoke({"date": "2025-01-15"})
+        
+        assert "Error" in result
+
+
+class TestPortfolioAnalysisToolFactory:
+    """Test portfolio analysis tool factory creation."""
+    
+    @pytest.mark.unit
+    def test_create_analysis_tool_returns_structured_tool(self, mock_portfolio_analysis_service):
+        """Test that factory returns a StructuredTool."""
+        tool = create_portfolio_analysis_tool(mock_portfolio_analysis_service, 100)
+        
+        assert tool is not None
+        assert tool.name == "analyze_portfolio_performance"
+        assert "portfolio" in tool.description.lower()
 
 
 class TestPortfolioAnalysisToolExecution:
@@ -189,27 +187,11 @@ class TestPortfolioAnalysisToolExecution:
             "Metrics": {}
         }
         mock_portfolio_analysis_service.analyze_portfolio_performance_async.return_value = expected_analysis
-        portfolio_analysis_tool.initialize_analysis_tool(mock_portfolio_analysis_service, 100)
+        tool = create_portfolio_analysis_tool(mock_portfolio_analysis_service, 100)
         
-        result = await portfolio_analysis_tool.analyze_portfolio_performance.ainvoke(
-            {"analysis_date": "2025-01-15"}
-        )
+        result = await tool.ainvoke({"analysis_date": "2025-01-15"})
         
         assert result == expected_analysis
-    
-    @pytest.mark.unit
-    async def test_analyze_performance_not_initialized_returns_error(self):
-        """Test error when tool not initialized."""
-        # Reset global state
-        portfolio_analysis_tool._portfolio_analysis_service = None
-        portfolio_analysis_tool._account_id = None
-        
-        result = await portfolio_analysis_tool.analyze_portfolio_performance.ainvoke(
-            {"analysis_date": "2025-01-15"}
-        )
-        
-        assert "Error" in result
-        assert "not initialized" in result["Error"]
     
     @pytest.mark.unit
     async def test_analyze_performance_handles_today_keyword(
@@ -220,11 +202,9 @@ class TestPortfolioAnalysisToolExecution:
             "AccountId": 100,
             "TotalValue": 1500.00
         }
-        portfolio_analysis_tool.initialize_analysis_tool(mock_portfolio_analysis_service, 100)
+        tool = create_portfolio_analysis_tool(mock_portfolio_analysis_service, 100)
         
-        result = await portfolio_analysis_tool.analyze_portfolio_performance.ainvoke(
-            {"analysis_date": "today"}
-        )
+        result = await tool.ainvoke({"analysis_date": "today"})
         
         assert "Error" not in result
         mock_portfolio_analysis_service.analyze_portfolio_performance_async.assert_called_once()
