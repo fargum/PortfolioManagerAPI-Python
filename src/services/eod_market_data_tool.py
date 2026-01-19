@@ -2,7 +2,7 @@
 import logging
 import asyncio
 from typing import Any, Dict, List, Optional
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 import httpx
 from decimal import Decimal
 
@@ -267,7 +267,7 @@ class EodMarketDataTool:
                 symbols_list = [str(s).strip() for s in symbols if s]
             
             # Parse published date
-            published_date = datetime.utcnow()
+            published_date = datetime.now(timezone.utc)
             if date_str:
                 try:
                     published_date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))

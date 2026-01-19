@@ -1,6 +1,6 @@
 """Service for managing conversation threads and memory operations."""
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, desc
@@ -65,7 +65,7 @@ class ConversationThreadService:
         
         if active_thread:
             # Check if thread should be closed due to inactivity
-            time_since_activity = datetime.utcnow() - active_thread.last_activity.replace(tzinfo=None)
+            time_since_activity = datetime.now(timezone.utc) - active_thread.last_activity.replace(tzinfo=None)
             
             if time_since_activity > self.INACTIVITY_THRESHOLD:
                 logger.info(
@@ -145,7 +145,7 @@ class ConversationThreadService:
         Returns:
             ConversationThread: Newly created thread
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         thread = ConversationThread(
             account_id=account_id,
             thread_title=f"Conversation {now.strftime('%Y-%m-%d %H:%M')}",
@@ -169,8 +169,8 @@ class ConversationThreadService:
         Args:
             thread: Thread to update
         """
-        thread.last_activity = datetime.utcnow()
-        thread.updated_at = datetime.utcnow()
+        thread.last_activity = datetime.now(timezone.utc)
+        thread.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
     
     async def _deactivate_thread(self, thread: ConversationThread) -> None:
@@ -181,7 +181,7 @@ class ConversationThreadService:
             thread: Thread to deactivate
         """
         thread.is_active = False
-        thread.updated_at = datetime.utcnow()
+        thread.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
         logger.info(f"Deactivated thread {thread.id}")
     

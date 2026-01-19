@@ -1,5 +1,5 @@
 """Account repository for Azure AD user management - mirrors C# IAccountRepository."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select
@@ -62,7 +62,7 @@ class AccountRepository:
                 email=email,
                 display_name=display_name,
                 is_active=True,
-                last_login_at=datetime.utcnow()
+                last_login_at=datetime.now(timezone.utc)
             )
             self.db.add(account)
 

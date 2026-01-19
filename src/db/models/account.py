@@ -1,5 +1,5 @@
 """Account model representing user accounts in the database."""
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String
 from sqlalchemy.orm import relationship
@@ -31,14 +31,14 @@ class Account(Base):
 
     def record_login(self) -> None:
         """Record login timestamp."""
-        self.last_login_at = datetime.utcnow()  # type: ignore[assignment]
-        self.updated_at = datetime.utcnow()  # type: ignore[assignment]
+        self.last_login_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+        self.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
 
     def update_user_info(self, email: str, display_name: str) -> None:
         """Update user info from Azure AD claims."""
         self.email = email  # type: ignore[assignment]
         self.display_name = display_name  # type: ignore[assignment]
-        self.updated_at = datetime.utcnow()  # type: ignore[assignment]
+        self.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
 
     def __repr__(self) -> str:
         return f"<Account(id={self.id}, email={self.email})>"

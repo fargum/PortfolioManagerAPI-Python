@@ -1,6 +1,6 @@
 """Business logic service for Holdings."""
 from typing import Any, List, Optional, Sequence
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from decimal import Decimal
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -528,7 +528,7 @@ class HoldingService:
             holding.current_value = new_current_value
             holding.daily_profit_loss = new_current_value - holding.bought_value
             holding.daily_profit_loss_percentage = ((new_current_value - holding.bought_value) / holding.bought_value * 100) if holding.bought_value > 0 else Decimal('0')
-            holding.updated_at = datetime.utcnow()
+            holding.updated_at = datetime.now(timezone.utc)
             
             await self.db.commit()
             await self.db.refresh(holding)
