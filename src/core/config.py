@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     # [{"id":"gpt-4o-mini","display_name":"GPT-4o Mini"},{"id":"gpt-4o","display_name":"GPT-4o","supports_tools":true}]
     azure_foundry_available_models: str = "[]"
 
+    # Tavily Configuration (Required for market intelligence tools)
+    tavily_api_key: str = ""
+    tavily_base_url: str = "https://api.tavily.com"
+    tavily_timeout_seconds: int = 30
+
     # Voice mode settings
     enable_voice_debug: bool = False
 
@@ -102,6 +107,11 @@ class Settings(BaseSettings):
     def is_azure_foundry_configured(self) -> bool:
         """Check if Azure Foundry is properly configured."""
         return bool(self.azure_foundry_project_endpoint and self.azure_foundry_api_key)
+
+    @property
+    def is_tavily_configured(self) -> bool:
+        """Check if Tavily market intelligence is configured."""
+        return bool(self.tavily_api_key)
 
     @property
     def is_azure_ad_configured(self) -> bool:

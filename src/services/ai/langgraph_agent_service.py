@@ -35,6 +35,7 @@ from src.services.eod_market_data_tool import EodMarketDataTool
 from src.services.holding_service import HoldingService
 from src.services.metrics_service import get_metrics_service
 from src.services.pricing_calculation_service import PricingCalculationService
+from src.services.tavily_service import TavilyService
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,8 @@ class LangGraphAgentService:
         self,
         ai_config: AIConfig,
         agent_prompt_service: AgentPromptService,
-        settings: Settings
+        settings: Settings,
+        tavily_service: Optional[TavilyService] = None,
     ):
         """
         Initialize the LangGraph agent service.
@@ -73,6 +75,7 @@ class LangGraphAgentService:
         self.ai_config = ai_config
         self.agent_prompt_service = agent_prompt_service
         self.settings = settings
+        self.tavily_service = tavily_service
 
         # Initialize AsyncPostgresSaver checkpointer for conversation memory
         # AsyncPostgresSaver expects standard psycopg connection string
@@ -144,17 +147,26 @@ class LangGraphAgentService:
         tools.append(create_portfolio_analysis_tool(portfolio_analysis_service, account_id))
         tools.append(create_portfolio_comparison_tool(portfolio_analysis_service, account_id))
         
-        # Create market intelligence and real-time pricing tools with EOD tool
+        # Create Tavily-powered market intelligence tools
+        news_tool, fundamentals_tool, overview_tool, market_tool = (
+            create_market_intelligence_tools(self.tavily_service)
+        )
+        tools += [news_tool, fundamentals_tool, overview_tool, market_tool]
+
+        # Real-time prices stay on EOD (Tavily is research/news, not tick data)
         eod_tool = holding_service.eod_tool
-        market_context_tool, market_sentiment_tool = create_market_intelligence_tools(eod_tool)
-        tools.append(market_context_tool)
-        tools.append(market_sentiment_tool)
         tools.append(create_real_time_prices_tool(eod_tool))
-        
-        if eod_tool:
-            logger.info(f"Created {len(tools)} tools (including real-time prices and market intelligence) for account {account_id}")
+
+        if self.tavily_service:
+            logger.info(
+                f"Created {len(tools)} tools (Tavily market intelligence enabled) "
+                f"for account {account_id}"
+            )
         else:
-            logger.warning(f"Created {len(tools)} tools for account {account_id} (EOD tool not available)")
+            logger.warning(
+                f"Created {len(tools)} tools for account {account_id} "
+                f"(Tavily not configured — market intelligence tools degraded)"
+            )
         
         return tools
 
@@ -399,18 +411,22 @@ class LangGraphAgentService:
             "get_portfolio_holdings": "📊 Fetching your portfolio holdings...\n\n",
             "analyze_portfolio_performance": "📈 Analyzing portfolio performance...\n\n",
             "compare_portfolio_performance": "📊 Comparing portfolio performance...\n\n",
-            "get_market_context": "🌍 Getting market context...\n\n",
-            "get_market_sentiment": "💭 Analyzing market sentiment...\n\n",
-            "get_real_time_prices": "💰 Fetching real-time stock prices...\n\n"
+            "search_recent_news": "🔍 Searching recent news...\n\n",
+            "research_company_fundamentals": "📊 Researching fundamentals...\n\n",
+            "get_company_overview": "🏢 Getting company overview...\n\n",
+            "get_market_overview": "🌍 Getting market overview...\n\n",
+            "get_real_time_prices": "💰 Fetching real-time stock prices...\n\n",
         }
 
         tool_completion_messages = {
             "get_portfolio_holdings": "✓ Portfolio data retrieved\n\n",
             "analyze_portfolio_performance": "✓ Analysis complete\n\n",
             "compare_portfolio_performance": "✓ Comparison complete\n\n",
-            "get_market_context": "✓ Market context retrieved\n\n",
-            "get_market_sentiment": "✓ Sentiment analysis complete\n\n",
-            "get_real_time_prices": "✓ Prices retrieved\n\n"
+            "search_recent_news": "✓ News retrieved\n\n",
+            "research_company_fundamentals": "✓ Fundamentals research complete\n\n",
+            "get_company_overview": "✓ Company overview retrieved\n\n",
+            "get_market_overview": "✓ Market overview retrieved\n\n",
+            "get_real_time_prices": "✓ Prices retrieved\n\n",
         }
 
         # Track active tool spans and their start times

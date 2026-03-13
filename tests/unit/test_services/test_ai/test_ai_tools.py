@@ -19,9 +19,11 @@ from src.schemas.holding import PortfolioHoldingDto, AccountHoldingsResponse
 from src.services.ai.tools import (
     create_portfolio_holdings_tool,
     create_portfolio_analysis_tool,
+    create_market_intelligence_tools,
 )
 from src.services.holding_service import HoldingService
 from src.services.ai.portfolio_analysis_service import PortfolioAnalysisService
+from src.services.tavily_service import TavilyService
 
 
 @pytest.fixture
@@ -208,3 +210,165 @@ class TestPortfolioAnalysisToolExecution:
         
         assert "Error" not in result
         mock_portfolio_analysis_service.analyze_portfolio_performance_async.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Tavily market intelligence tools
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def mock_tavily_service():
+    """Mock TavilyService for testing."""
+    mock = Mock(spec=TavilyService)
+    mock.search_recent_news = AsyncMock()
+    mock.research_company_fundamentals = AsyncMock()
+    mock.get_company_overview = AsyncMock()
+    mock.get_market_overview = AsyncMock()
+    return mock
+
+
+class TestMarketIntelligenceToolFactory:
+    """Test market intelligence tool factory creation."""
+
+    @pytest.mark.unit
+    def test_creates_four_structured_tools(self, mock_tavily_service):
+        news, fundamentals, overview, market = create_market_intelligence_tools(
+            mock_tavily_service
+        )
+        assert news.name == "search_recent_news"
+        assert fundamentals.name == "research_company_fundamentals"
+        assert overview.name == "get_company_overview"
+        assert market.name == "get_market_overview"
+
+    @pytest.mark.unit
+    def test_two_instances_are_independent(self, mock_tavily_service):
+        tools_a = create_market_intelligence_tools(mock_tavily_service)
+        tools_b = create_market_intelligence_tools(mock_tavily_service)
+        assert tools_a[0] is not tools_b[0]
+
+    @pytest.mark.unit
+    def test_accepts_none_service(self):
+        tools = create_market_intelligence_tools(None)
+        assert len(tools) == 4
+
+
+class TestSearchRecentNewsTool:
+    """Test search_recent_news tool execution."""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_successful_execution(self, mock_tavily_service):
+        mock_tavily_service.search_recent_news.return_value = {
+            "answer": "Apple news summary",
+            "results": [{"title": "Apple Q1", "url": "http://example.com", "content": "...", "published_date": "2025-01-01"}],
+        }
+        news_tool, _, _, _ = create_market_intelligence_tools(mock_tavily_service)
+        result = await news_tool.ainvoke({"tickers": ["AAPL"]})
+
+        assert result["Status"] == "Success"
+        assert result["Answer"] == "Apple news summary"
+        assert len(result["Results"]) == 1
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_returns_not_configured_when_service_is_none(self):
+        news_tool, _, _, _ = create_market_intelligence_tools(None)
+        result = await news_tool.ainvoke({"tickers": ["AAPL"]})
+
+        assert result["Status"] == "NotConfigured"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_returns_error_when_tavily_returns_none(self, mock_tavily_service):
+        mock_tavily_service.search_recent_news.return_value = None
+        news_tool, _, _, _ = create_market_intelligence_tools(mock_tavily_service)
+        result = await news_tool.ainvoke({"tickers": ["AAPL"]})
+
+        assert result["Status"] == "Error"
+
+
+class TestResearchCompanyFundamentalsTool:
+    """Test research_company_fundamentals tool execution."""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_successful_execution(self, mock_tavily_service):
+        mock_tavily_service.research_company_fundamentals.return_value = {
+            "answer": "P/E is 28, dividend yield 0.5%",
+            "results": [{"title": "AAPL Fundamentals", "url": "http://stockanalysis.com"}],
+        }
+        _, fundamentals_tool, _, _ = create_market_intelligence_tools(mock_tavily_service)
+        result = await fundamentals_tool.ainvoke({"ticker": "AAPL", "company_name": "Apple"})
+
+        assert result["Status"] == "Success"
+        assert result["Ticker"] == "AAPL"
+        assert "P/E" in result["Summary"]
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_returns_not_configured_when_service_is_none(self):
+        _, fundamentals_tool, _, _ = create_market_intelligence_tools(None)
+        result = await fundamentals_tool.ainvoke({"ticker": "AAPL"})
+
+        assert result["Status"] == "NotConfigured"
+
+
+class TestGetCompanyOverviewTool:
+    """Test get_company_overview tool execution."""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_successful_execution(self, mock_tavily_service):
+        mock_tavily_service.get_company_overview.return_value = {
+            "answer": "Apple designs consumer electronics",
+            "results": [],
+        }
+        _, _, overview_tool, _ = create_market_intelligence_tools(mock_tavily_service)
+        result = await overview_tool.ainvoke({"ticker": "AAPL", "company_name": "Apple"})
+
+        assert result["Status"] == "Success"
+        assert result["Overview"] == "Apple designs consumer electronics"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_returns_not_configured_when_service_is_none(self):
+        _, _, overview_tool, _ = create_market_intelligence_tools(None)
+        result = await overview_tool.ainvoke({"ticker": "AAPL"})
+
+        assert result["Status"] == "NotConfigured"
+
+
+class TestGetMarketOverviewTool:
+    """Test get_market_overview tool execution."""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_successful_execution(self, mock_tavily_service):
+        mock_tavily_service.get_market_overview.return_value = {
+            "answer": "Markets up today",
+            "results": [{"title": "Markets rally", "url": "http://reuters.com", "content": "...", "published_date": "2025-01-01"}],
+        }
+        _, _, _, market_tool = create_market_intelligence_tools(mock_tavily_service)
+        result = await market_tool.ainvoke({})
+
+        assert result["Status"] == "Success"
+        assert result["MarketSummary"] == "Markets up today"
+        assert len(result["NewsItems"]) == 1
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_accepts_optional_focus(self, mock_tavily_service):
+        mock_tavily_service.get_market_overview.return_value = {"answer": "UK up", "results": []}
+        _, _, _, market_tool = create_market_intelligence_tools(mock_tavily_service)
+        result = await market_tool.ainvoke({"focus": "UK markets"})
+
+        assert result["Status"] == "Success"
+        mock_tavily_service.get_market_overview.assert_called_once_with("UK markets")
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_returns_not_configured_when_service_is_none(self):
+        _, _, _, market_tool = create_market_intelligence_tools(None)
+        result = await market_tool.ainvoke({})
+
+        assert result["Status"] == "NotConfigured"

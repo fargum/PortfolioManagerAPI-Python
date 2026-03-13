@@ -1,157 +1,249 @@
 """
-LangChain tool for market intelligence.
+LangChain tools for market intelligence via Tavily web search.
 Uses factory pattern to create tools per-request, avoiding global state race conditions.
+
+Four tools are provided:
+- search_recent_news: past-week news for specific tickers
+- research_company_fundamentals: P/E, EPS, dividends, analyst ratings
+- get_company_overview: business model and competitive position
+- get_market_overview: daily market conditions and top financial news
 """
 import logging
-from datetime import date
 from typing import List, Optional, Tuple
 
 from langchain_core.tools import StructuredTool
 
-from src.services.eod_market_data_tool import EodMarketDataTool
+from src.services.tavily_service import TavilyService
 
 logger = logging.getLogger(__name__)
 
+_NOT_CONFIGURED = {
+    "Status": "NotConfigured",
+    "Message": "Market intelligence service is not configured. Please set TAVILY_API_KEY.",
+}
 
-def create_market_intelligence_tools(eod_tool: Optional[EodMarketDataTool]) -> Tuple[StructuredTool, StructuredTool]:
+
+def create_market_intelligence_tools(
+    tavily_service: Optional[TavilyService],
+) -> Tuple[StructuredTool, StructuredTool, StructuredTool, StructuredTool]:
     """
-    Factory function to create market intelligence tools with bound EOD tool.
+    Factory function to create market intelligence tools with a bound TavilyService.
     Creates new tool instances per-request to avoid global state race conditions.
-    
-    Args:
-        eod_tool: EOD market data tool instance (can be None if not configured)
-        
-    Returns:
-        Tuple of (get_market_context_tool, get_market_sentiment_tool)
-    """
-    
-    async def get_market_context(tickers: List[str]) -> dict:
-        """Get financial news, headlines, and market updates for specific stocks.
-        
-        ALWAYS USE THIS TOOL when user mentions: news, headlines, updates, "what's happening", articles about ANY stock or company.
-        
-        Args:
-            tickers: Stock ticker symbols OR company names (e.g., ['AAPL', 'Microsoft', 'GOOGL', 'Tesla'])
-                     You can use either ticker symbols (AAPL, MSFT, GOOGL, TSLA) or company names (Apple, Microsoft, Google, Tesla).
-                     The API will understand both formats.
-        
-        Returns:
-            Dictionary with Status, Message, and Articles list. Each article contains:
-            - Title: Article headline
-            - Summary: Article content/description
-            - URL: Link to full article
-            - PublishedDate: When the article was published
-            - RelatedTickers: Tickers mentioned in the article
-        """
-        if not eod_tool:
-            logger.warning("EOD tool not initialized, cannot fetch market news")
-            return {
-                "Status": "NotConfigured",
-                "Message": "Market news service is not configured. Please configure EOD API token.",
-                "Articles": []
-            }
-        
-        try:
-            logger.info(f"Getting market news for tickers: {', '.join(tickers)}")
-            
-            news_items = await eod_tool.get_financial_news_async(tickers, limit=10)
-            
-            return {
-                "Status": "Success",
-                "Message": f"Retrieved {len(news_items)} news articles",
-                "Articles": news_items
-            }
-            
-        except Exception as ex:
-            logger.error(f"Error getting market context: {ex}", exc_info=True)
-            return {
-                "Status": "Error",
-                "Message": f"Failed to retrieve market news: {str(ex)}",
-                "Articles": []
-            }
 
-    async def get_market_sentiment(tickers: List[str]) -> dict:
-        """Get market sentiment and investor mood analysis for specific stocks.
-        
-        ALWAYS USE THIS TOOL when user mentions: sentiment, mood, feeling, opinion, investor confidence about ANY stock or company.
-        
+    Args:
+        tavily_service: Tavily service instance (can be None if not configured)
+
+    Returns:
+        Tuple of (search_recent_news, research_company_fundamentals,
+                  get_company_overview, get_market_overview)
+    """
+
+    async def search_recent_news(
+        tickers: List[str], company_names: str = ""
+    ) -> dict:
+        """Search for recent news articles about specific stock tickers from the past week.
+
+        ALWAYS USE THIS TOOL when the user asks about: news, headlines, updates,
+        "what's happening", articles about ANY stock or company.
+
         Args:
-            tickers: Stock ticker symbols OR company names (e.g., ['AAPL', 'Microsoft', 'Tesla'])
-        
-        USE THIS TOOL when the user asks about:
-        - Sentiment (e.g., "What's the sentiment on Apple?", "How do investors feel about Tesla?")
-        - Mood (e.g., "What's the market mood for Microsoft?")
-        - Fear/greed (e.g., "Is there fear or greed around this stock?")
-        - Investor feelings (e.g., "Are people bullish or bearish on Amazon?")
-        
+            tickers: List of stock ticker symbols (e.g. ['AAPL', 'MSFT', 'TSLA'])
+            company_names: Optional company names to improve search accuracy
+                           (e.g. 'Apple Microsoft Tesla')
+
         Returns:
-            Dictionary with:
-            - Status: Success/Error/NotConfigured
-            - Message: Description of results
-            - OverallSentimentScore: Decimal 0.0 to 1.0 (0=very negative, 1=very positive)
-            - SentimentLabel: Text description (e.g., "Positive", "Neutral")
-            - FearGreedIndex: Decimal 0 to 100 (0=extreme fear, 100=extreme greed)
+            Dictionary with Status, answer summary, and results list.
+            Each result contains title, url, content, and published_date.
         """
-        if not eod_tool:
-            logger.warning("EOD tool not initialized, cannot fetch market sentiment")
-            return {
-                "Status": "NotConfigured",
-                "Message": "Market sentiment service is not configured. Please configure EOD API token.",
-                "OverallSentimentScore": 0.5,
-                "SentimentLabel": "Neutral - Not Configured",
-                "FearGreedIndex": 50.0
-            }
-        
+        if not tavily_service:
+            return {**_NOT_CONFIGURED, "Results": []}
         try:
-            if not tickers:
-                logger.warning("No tickers provided for sentiment analysis")
+            data = await tavily_service.search_recent_news(tickers, company_names)
+            if not data:
                 return {
                     "Status": "Error",
-                    "Message": "No tickers provided for sentiment analysis",
-                    "OverallSentimentScore": 0.5,
-                    "SentimentLabel": "Neutral",
-                    "FearGreedIndex": 50.0
+                    "Message": "No data returned from Tavily",
+                    "Results": [],
                 }
-            
-            logger.info(f"Getting market sentiment for tickers: {', '.join(tickers)}")
-            
-            target_date = date.today()
-            sentiment_data = await eod_tool.get_market_sentiment_async(tickers, target_date)
-            
             return {
                 "Status": "Success",
-                "Message": "Sentiment analysis complete",
-                **sentiment_data
+                "Answer": data.get("answer", ""),
+                "Results": [
+                    {
+                        "Title": r.get("title", ""),
+                        "Url": r.get("url", ""),
+                        "Summary": r.get("content", ""),
+                        "PublishedDate": r.get("published_date", ""),
+                    }
+                    for r in data.get("results", [])
+                ],
             }
-            
-        except Exception as ex:
-            logger.error(f"Error getting market sentiment: {ex}", exc_info=True)
+        except Exception as exc:
+            logger.error("Error in search_recent_news: %s", exc, exc_info=True)
+            return {"Status": "Error", "Message": str(exc), "Results": []}
+
+    async def research_company_fundamentals(
+        ticker: str, company_name: str = ""
+    ) -> dict:
+        """Research company fundamentals: P/E ratio, EPS, dividend yield, analyst ratings,
+        price targets, earnings history.
+
+        USE THIS TOOL when the user asks about: P/E ratio, earnings per share, dividends,
+        analyst ratings, price targets, fundamentals, valuation for a specific company.
+
+        Args:
+            ticker: Stock ticker symbol (e.g. 'AAPL')
+            company_name: Company name to improve search accuracy (e.g. 'Apple')
+
+        Returns:
+            Dictionary with Status, AI-generated fundamentals summary, and source list.
+        """
+        if not tavily_service:
+            return {**_NOT_CONFIGURED, "Sources": []}
+        try:
+            data = await tavily_service.research_company_fundamentals(
+                ticker, company_name
+            )
+            if not data:
+                return {
+                    "Status": "Error",
+                    "Message": "No data returned from Tavily",
+                    "Sources": [],
+                }
             return {
-                "Status": "Error",
-                "Message": f"Failed to retrieve market sentiment: {str(ex)}",
-                "OverallSentimentScore": 0.5,
-                "SentimentLabel": "Neutral - Error",
-                "FearGreedIndex": 50.0
+                "Status": "Success",
+                "Ticker": ticker,
+                "Summary": data.get("answer", ""),
+                "Sources": [
+                    {"Title": r.get("title", ""), "Url": r.get("url", "")}
+                    for r in data.get("results", [])
+                ],
             }
-    
-    market_context_tool = StructuredTool.from_function(
-        coroutine=get_market_context,
-        name="get_market_context",
+        except Exception as exc:
+            logger.error(
+                "Error in research_company_fundamentals: %s", exc, exc_info=True
+            )
+            return {"Status": "Error", "Message": str(exc), "Sources": []}
+
+    async def get_company_overview(
+        ticker: str, company_name: str = ""
+    ) -> dict:
+        """Get a company overview including business model, competitive position,
+        and recent strategic developments.
+
+        USE THIS TOOL when the user asks about: what a company does, its business model,
+        competitive advantages, strategic direction, recent developments.
+
+        Args:
+            ticker: Stock ticker symbol (e.g. 'AAPL')
+            company_name: Company name to improve search accuracy (e.g. 'Apple')
+
+        Returns:
+            Dictionary with Status, AI-generated overview summary, and source list.
+        """
+        if not tavily_service:
+            return {**_NOT_CONFIGURED, "Sources": []}
+        try:
+            data = await tavily_service.get_company_overview(ticker, company_name)
+            if not data:
+                return {
+                    "Status": "Error",
+                    "Message": "No data returned from Tavily",
+                    "Sources": [],
+                }
+            return {
+                "Status": "Success",
+                "Ticker": ticker,
+                "Overview": data.get("answer", ""),
+                "Sources": [
+                    {"Title": r.get("title", ""), "Url": r.get("url", "")}
+                    for r in data.get("results", [])
+                ],
+            }
+        except Exception as exc:
+            logger.error("Error in get_company_overview: %s", exc, exc_info=True)
+            return {"Status": "Error", "Message": str(exc), "Sources": []}
+
+    async def get_market_overview(focus: Optional[str] = None) -> dict:
+        """Get current market conditions, major index movements, and top financial news.
+
+        USE THIS TOOL when the user asks about: market conditions today, how the market
+        is doing, major indices (S&P 500, FTSE, Dow), market sentiment, general market news.
+
+        Args:
+            focus: Optional focus area to narrow results
+                   (e.g. 'UK markets', 'tech sector', 'emerging markets')
+
+        Returns:
+            Dictionary with Status, AI-generated market summary, and news items.
+        """
+        if not tavily_service:
+            return {**_NOT_CONFIGURED, "NewsItems": []}
+        try:
+            data = await tavily_service.get_market_overview(focus)
+            if not data:
+                return {
+                    "Status": "Error",
+                    "Message": "No data returned from Tavily",
+                    "NewsItems": [],
+                }
+            return {
+                "Status": "Success",
+                "MarketSummary": data.get("answer", ""),
+                "NewsItems": [
+                    {
+                        "Title": r.get("title", ""),
+                        "Url": r.get("url", ""),
+                        "Summary": r.get("content", ""),
+                        "PublishedDate": r.get("published_date", ""),
+                    }
+                    for r in data.get("results", [])
+                ],
+            }
+        except Exception as exc:
+            logger.error("Error in get_market_overview: %s", exc, exc_info=True)
+            return {"Status": "Error", "Message": str(exc), "NewsItems": []}
+
+    search_recent_news_tool = StructuredTool.from_function(
+        coroutine=search_recent_news,
+        name="search_recent_news",
         description=(
-            "Get financial news, headlines, and market updates for specific stocks. "
-            "ALWAYS USE THIS TOOL when user mentions: news, headlines, updates, 'what's happening', articles about ANY stock or company. "
-            "Pass tickers as a list of stock symbols or company names."
-        )
+            "Search for recent news articles about specific stock tickers from the past week. "
+            "ALWAYS USE THIS TOOL when the user asks about news, headlines, or updates "
+            "for any stock or company."
+        ),
     )
-    
-    market_sentiment_tool = StructuredTool.from_function(
-        coroutine=get_market_sentiment,
-        name="get_market_sentiment",
+
+    research_company_fundamentals_tool = StructuredTool.from_function(
+        coroutine=research_company_fundamentals,
+        name="research_company_fundamentals",
         description=(
-            "Get market sentiment and investor mood analysis for specific stocks. "
-            "ALWAYS USE THIS TOOL when user mentions: sentiment, mood, feeling, opinion, investor confidence about ANY stock or company. "
-            "Returns sentiment score (0-1), label, and Fear & Greed Index (0-100)."
-        )
+            "Research company fundamentals including P/E ratio, EPS, dividend yield, "
+            "analyst ratings, and price targets. Use when asked about valuation or financials."
+        ),
     )
-    
-    return market_context_tool, market_sentiment_tool
+
+    get_company_overview_tool = StructuredTool.from_function(
+        coroutine=get_company_overview,
+        name="get_company_overview",
+        description=(
+            "Get a company overview including business model, competitive position, "
+            "and recent strategic developments."
+        ),
+    )
+
+    get_market_overview_tool = StructuredTool.from_function(
+        coroutine=get_market_overview,
+        name="get_market_overview",
+        description=(
+            "Get current market conditions, major index movements, and top financial news. "
+            "Use when the user asks how the market is doing today or about general market news."
+        ),
+    )
+
+    return (
+        search_recent_news_tool,
+        research_company_fundamentals_tool,
+        get_company_overview_tool,
+        get_market_overview_tool,
+    )

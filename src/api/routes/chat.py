@@ -12,6 +12,7 @@ from src.core.ai_config import AIConfig
 from src.core.auth import get_current_account_id
 from src.core.config import Settings
 from src.core.config import settings as app_settings
+from src.services.tavily_service import TavilyService
 from src.core.telemetry import get_tracer
 from src.db.session import get_db
 from src.schemas.voice import UIResponse, VoiceResponse
@@ -106,11 +107,23 @@ def get_agent_service() -> Optional[LangGraphAgentService]:
         prompt_service = get_prompt_service()
         settings = get_settings()
 
+        tavily_service = None
+        if app_settings.is_tavily_configured:
+            tavily_service = TavilyService(
+                api_key=app_settings.tavily_api_key,
+                base_url=app_settings.tavily_base_url,
+                timeout_seconds=app_settings.tavily_timeout_seconds,
+            )
+            logger.info("Tavily market intelligence configured")
+        else:
+            logger.warning("TAVILY_API_KEY not set — market intelligence tools degraded")
+
         logger.info("Initializing LangGraph agent service...")
         agent_service = LangGraphAgentService(
             ai_config=ai_config,
             agent_prompt_service=prompt_service,
-            settings=settings
+            settings=settings,
+            tavily_service=tavily_service,
         )
         logger.info("LangGraph agent service initialized successfully")
         return agent_service
