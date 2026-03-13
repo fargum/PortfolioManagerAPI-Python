@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".venv/Scripts/python.exe -m ruff check src/ --select E,F --quiet 2>&1 | head -20"
+          }
+        ]
+      }
+    ]
+  }
+}
