@@ -43,6 +43,11 @@ class ChatRequest(BaseModel):
         alias="maxSpeakWords",
         description="Max words for speak_text in voice mode",
     )
+    model_id: Optional[str] = Field(
+        None,
+        alias="modelId",
+        description="Model deployment ID to use. Defaults to configured default model.",
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -52,6 +57,15 @@ class ChatHealthResponse(BaseModel):
     status: str
     azure_configured: bool
     model_name: str
+    available_models: int = 0
+
+
+class AiModelResponse(BaseModel):
+    """Available AI model info."""
+    id: str
+    display_name: str = Field(alias="displayName")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 # Dependencies
@@ -115,12 +129,24 @@ def require_ai_service(
     if agent_service is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="AI service is not configured. Please set AZURE_FOUNDRY_ENDPOINT and AZURE_FOUNDRY_API_KEY environment variables."
+            detail=(
+                "AI service is not configured. "
+                "Please set AZURE_FOUNDRY_PROJECT_ENDPOINT and AZURE_FOUNDRY_API_KEY."
+            )
         )
     return agent_service
 
 
 # Routes
+@router.get("/models", response_model=list[AiModelResponse])
+async def get_available_models(ai_config: AIConfig = Depends(get_ai_config)):
+    """Returns the list of available AI models configured for this deployment."""
+    return [
+        AiModelResponse(id=m.id, display_name=m.display_name)
+        for m in ai_config.available_models
+    ]
+
+
 @router.get("/health", response_model=ChatHealthResponse)
 async def health_check(ai_config: AIConfig = Depends(get_ai_config)):
     """
@@ -129,7 +155,7 @@ async def health_check(ai_config: AIConfig = Depends(get_ai_config)):
     Returns configuration status and model information.
     """
     is_configured = bool(
-        ai_config.azure_openai_endpoint and
+        ai_config.project_endpoint and
         ai_config.azure_openai_api_key and
         ai_config.azure_openai_deployment_name
     )
@@ -137,7 +163,8 @@ async def health_check(ai_config: AIConfig = Depends(get_ai_config)):
     return ChatHealthResponse(
         status="healthy" if is_configured else "not_configured",
         azure_configured=is_configured,
-        model_name=ai_config.azure_openai_deployment_name or "not_configured"
+        model_name=ai_config.azure_openai_deployment_name or "not_configured",
+        available_models=len(ai_config.available_models),
     )
 
 
@@ -191,6 +218,10 @@ async def stream_chat(
             metrics.increment_ai_chat_requests(account_id, "stream", "requested")
             start_time = time.perf_counter()
 
+            effective_model = (
+                request.model_id or agent_service.ai_config.azure_openai_deployment_name
+            )
+
             # Stream response using LangGraph agent with conversation memory
             async def generate() -> AsyncIterator[str]:
                 """Generate streaming response."""
@@ -198,8 +229,9 @@ async def stream_chat(
                     async for token in agent_service.stream_chat(
                         user_message=request.query,
                         account_id=account_id,
-                        db=db,  # Database session for this request
-                        thread_id=request.thread_id  # Optional thread ID for conversation continuity
+                        db=db,
+                        thread_id=request.thread_id,
+                        model_id=request.model_id,
                     ):
                         # Send token as Server-Sent Event
                         yield f"data: {token}\n\n"
@@ -210,16 +242,14 @@ async def stream_chat(
                     # Record success metrics
                     duration = time.perf_counter() - start_time
                     metrics.record_ai_chat_request_duration(
-                        duration, account_id, "stream",
-                        agent_service.ai_config.azure_openai_deployment_name, "success"
+                        duration, account_id, "stream", effective_model, "success"
                     )
 
                 except Exception as e:
                     logger.error(f"Error during streaming: {e}", exc_info=True)
                     duration = time.perf_counter() - start_time
                     metrics.record_ai_chat_request_duration(
-                        duration, account_id, "stream",
-                        agent_service.ai_config.azure_openai_deployment_name, "error"
+                        duration, account_id, "stream", effective_model, "error"
                     )
                     yield f"data: [ERROR: {str(e)}]\n\n"
 
@@ -281,10 +311,12 @@ async def respond_chat(
         span.set_attribute("mode", request.mode)
         span.set_attribute("query.length", len(request.query))
 
+        effective_model = request.model_id or agent_service.ai_config.azure_openai_deployment_name
+
         with metrics.track_ai_chat_request(
             account_id,
             request.mode,
-            agent_service.ai_config.azure_openai_deployment_name
+            effective_model,
         ):
             try:
                 start_time = time.perf_counter()
@@ -302,6 +334,7 @@ async def respond_chat(
                     db=db,
                     thread_id=request.thread_id,
                     voice_mode=(request.mode == "voice"),
+                    model_id=request.model_id,
                 )
 
                 latency_ms = int((time.perf_counter() - start_time) * 1000)
@@ -317,7 +350,7 @@ async def respond_chat(
                     tool_events=tool_events,
                     query=request.query,
                     max_speak_words=request.max_speak_words,
-                    model_name=agent_service.ai_config.azure_openai_deployment_name,
+                    model_name=effective_model,
                     latency_ms=latency_ms,
                     include_telemetry=settings.enable_voice_debug,
                 )

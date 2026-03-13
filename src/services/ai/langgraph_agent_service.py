@@ -10,7 +10,8 @@ from typing import Any, AsyncIterator, List, Literal, Optional
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool
-from langchain_openai import AzureChatOpenAI
+from langchain_core.language_models import BaseChatModel
+from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
@@ -73,15 +74,6 @@ class LangGraphAgentService:
         self.agent_prompt_service = agent_prompt_service
         self.settings = settings
 
-        # Initialize Azure OpenAI model
-        self.model = AzureChatOpenAI(
-            azure_endpoint=ai_config.azure_openai_endpoint,
-            api_key=ai_config.azure_openai_api_key,
-            api_version=ai_config.azure_openai_api_version,
-            azure_deployment=ai_config.azure_openai_deployment_name,
-            streaming=True
-        )
-
         # Initialize AsyncPostgresSaver checkpointer for conversation memory
         # AsyncPostgresSaver expects standard psycopg connection string
         # Tables must already exist in public schema (checkpoints, checkpoint_writes, checkpoint_blobs)
@@ -103,6 +95,25 @@ class LangGraphAgentService:
                 f"Cannot initialize conversation memory: {e}. "
                 f"Check database connection and permissions."
             ) from e
+
+    def _create_model(self, model_id: Optional[str] = None) -> BaseChatModel:
+        """
+        Create a ChatOpenAI model instance for the given model ID.
+        Called per-request so different callers can use different deployed models.
+
+        Args:
+            model_id: Deployment name to use. Falls back to configured default if None.
+
+        Returns:
+            Configured ChatOpenAI instance pointing at Azure AI Foundry project endpoint.
+        """
+        effective_id = model_id or self.ai_config.azure_openai_deployment_name
+        return ChatOpenAI(
+            base_url=self.ai_config.project_endpoint,
+            api_key=self.ai_config.azure_openai_api_key,
+            model=effective_id,
+            streaming=True,
+        )
 
     def _create_tools_for_request(
         self,
@@ -147,18 +158,19 @@ class LangGraphAgentService:
         
         return tools
 
-    def _create_agent_node(self, model_with_tools, system_prompt: str):
+    def _create_agent_node(self, model_with_tools, system_prompt: str, model_name: Optional[str] = None):
         """
         Create the agent node function with comprehensive LLM tracing.
 
         Args:
             model_with_tools: LLM with tools bound
             system_prompt: System prompt for the agent
+            model_name: Effective model name for telemetry (defaults to configured default)
 
         Returns:
             Function that processes agent state
         """
-        model_name = self.ai_config.azure_openai_deployment_name
+        model_name = model_name or self.ai_config.azure_openai_deployment_name
         metrics = get_metrics_service()
 
         def call_model(state: AgentState) -> AgentState:
@@ -313,33 +325,45 @@ class LangGraphAgentService:
 
         return should_continue
 
-    def _build_graph(self, tools: list, system_prompt: str):
+    def _build_graph(self, tools: list, system_prompt: str, model_id: Optional[str] = None):
         """
         Build the LangGraph StateGraph with nodes and edges.
 
         Args:
             tools: List of portfolio tools
             system_prompt: System prompt for the agent
+            model_id: Optional model deployment name; falls back to configured default
 
         Returns:
             Compiled StateGraph workflow
         """
         workflow = StateGraph(AgentState)
 
+        # Create model for this request
+        model = self._create_model(model_id)
+
+        # Check if model supports tool calling
+        model_config = self.ai_config.get_model_config(model_id)
+        supports_tools = model_config.supports_tools if model_config else True
+        effective_tools = tools if supports_tools else []
+        if not supports_tools:
+            logger.info(f"Model '{model_id}' does not support tool calling — running without tools")
+
         # Log available tools
-        tool_names = [tool.name if hasattr(tool, 'name') else str(tool) for tool in tools]
-        logger.info(f"Binding {len(tools)} tools to model: {tool_names}")
+        tool_names = [tool.name if hasattr(tool, 'name') else str(tool) for tool in effective_tools]
+        logger.info(f"Binding {len(effective_tools)} tools to model '{model_id or self.ai_config.azure_openai_deployment_name}': {tool_names}")
 
         # Bind tools to model
-        model_with_tools = self.model.bind_tools(tools)
+        model_with_tools = model.bind_tools(effective_tools) if supports_tools else model
 
         # Create node functions
-        call_model = self._create_agent_node(model_with_tools, system_prompt)
+        effective_model_name = model_id or self.ai_config.azure_openai_deployment_name
+        call_model = self._create_agent_node(model_with_tools, system_prompt, model_name=effective_model_name)
         should_continue = self._create_routing_function()
 
         # Build graph structure
         workflow.add_node("agent", call_model)
-        workflow.add_node("tools", ToolNode(tools))
+        workflow.add_node("tools", ToolNode(effective_tools))
         workflow.add_edge(START, "agent")
         workflow.add_conditional_edges(
             "agent",
@@ -465,7 +489,8 @@ class LangGraphAgentService:
         account_id: int,
         db,
         thread_id: Optional[int] = None,
-        voice_mode: bool = False
+        voice_mode: bool = False,
+        model_id: Optional[str] = None,
     ) -> tuple[Any, dict, dict, int]:
         """
         Prepare common context for chat operations.
@@ -528,7 +553,7 @@ class LangGraphAgentService:
             system_prompt = self.agent_prompt_service.get_voice_mode_prompt(account_id)
         else:
             system_prompt = self.agent_prompt_service.get_portfolio_advisor_prompt(account_id)
-        workflow = self._build_graph(tools, system_prompt)
+        workflow = self._build_graph(tools, system_prompt, model_id=model_id)
 
         # Prepare state and config
         initial_state = {
@@ -550,7 +575,8 @@ class LangGraphAgentService:
         user_message: str,
         account_id: int,
         db,
-        thread_id: Optional[int] = None
+        thread_id: Optional[int] = None,
+        model_id: Optional[str] = None,
     ) -> AsyncIterator[str]:
         """
         Stream chat response with tool calling and conversation memory.
@@ -561,23 +587,25 @@ class LangGraphAgentService:
             account_id: Authenticated user's account ID (injected from request)
             db: Database session for this request
             thread_id: Optional conversation thread ID (None creates/uses active thread)
+            model_id: Optional model deployment name; falls back to configured default
 
         Yields:
             Chunks of the AI response
         """
         tracer = get_tracer()
+        effective_model = model_id or self.ai_config.azure_openai_deployment_name
 
         with tracer.start_as_current_span("AgentStreamChat") as span:
             span.set_attribute("agent.account_id", account_id)
             span.set_attribute("agent.mode", "stream")
-            span.set_attribute("agent.model", self.ai_config.azure_openai_deployment_name)
+            span.set_attribute("agent.model", effective_model)
             span.set_attribute("agent.user_message_length", len(user_message))
             span.set_attribute("agent.user_message_preview", user_message[:200] if len(user_message) > 200 else user_message)
 
             try:
                 # Prepare common chat context
                 workflow, initial_state, config, actual_thread_id = await self._prepare_chat_context(
-                    user_message, account_id, db, thread_id
+                    user_message, account_id, db, thread_id, model_id=model_id
                 )
 
                 span.set_attribute("agent.thread_id", actual_thread_id)
@@ -706,7 +734,8 @@ class LangGraphAgentService:
         account_id: int,
         db,
         thread_id: Optional[int] = None,
-        voice_mode: bool = False
+        voice_mode: bool = False,
+        model_id: Optional[str] = None,
     ) -> tuple[str, list[dict[str, Any]]]:
         """
         Execute chat and return complete response with tool events.
@@ -718,6 +747,7 @@ class LangGraphAgentService:
             db: Database session
             thread_id: Optional conversation thread ID
             voice_mode: If True, use voice-optimized prompt with summary instructions
+            model_id: Optional model deployment name; falls back to configured default
 
         Returns:
             Tuple of (final_text, tool_events) where:
@@ -725,18 +755,19 @@ class LangGraphAgentService:
             - tool_events: List of {"name": str, "input": Any, "output": Any}
         """
         tracer = get_tracer()
+        effective_model = model_id or self.ai_config.azure_openai_deployment_name
 
         with tracer.start_as_current_span("AgentRunChat") as span:
             span.set_attribute("agent.account_id", account_id)
             span.set_attribute("agent.mode", "voice" if voice_mode else "run")
-            span.set_attribute("agent.model", self.ai_config.azure_openai_deployment_name)
+            span.set_attribute("agent.model", effective_model)
             span.set_attribute("agent.user_message_length", len(user_message))
             span.set_attribute("agent.user_message_preview", user_message[:200] if len(user_message) > 200 else user_message)
 
             try:
                 # Prepare common chat context
                 workflow, initial_state, config, actual_thread_id = await self._prepare_chat_context(
-                    user_message, account_id, db, thread_id, voice_mode=voice_mode
+                    user_message, account_id, db, thread_id, voice_mode=voice_mode, model_id=model_id
                 )
 
                 span.set_attribute("agent.thread_id", actual_thread_id)

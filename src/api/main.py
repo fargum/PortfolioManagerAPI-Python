@@ -189,7 +189,7 @@ async def health_check():
     # Check AI configuration
     try:
         ai_config = AIConfig()
-        is_configured = ai_config.azure_openai_endpoint and ai_config.azure_openai_api_key
+        is_configured = ai_config.project_endpoint and ai_config.azure_openai_api_key
         health_status["checks"]["ai"] = {
             "status": "configured" if is_configured else "not_configured",
             "message": f"Azure AI Foundry: {'Ready' if is_configured else 'Not configured'}",

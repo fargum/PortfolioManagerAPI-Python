@@ -49,10 +49,13 @@ class Settings(BaseSettings):
     eod_api_timeout_seconds: int = 30
 
     # Azure AI Foundry Configuration (optional - AI features disabled if not set)
-    azure_foundry_endpoint: str = ""  # Optional - AI features disabled if not set
-    azure_foundry_api_key: str = ""  # Optional - AI features disabled if not set
+    # Use the project endpoint format: https://{resource}.services.ai.azure.com/openai/v1/
+    azure_foundry_project_endpoint: str = ""
+    azure_foundry_api_key: str = ""
     azure_foundry_model_name: str = "gpt-4o-mini"
-    azure_foundry_api_version: str = "2024-08-01-preview"
+    # JSON array of available models, e.g.:
+    # [{"id":"gpt-4o-mini","display_name":"GPT-4o Mini"},{"id":"gpt-4o","display_name":"GPT-4o","supports_tools":true}]
+    azure_foundry_available_models: str = "[]"
 
     # Voice mode settings
     enable_voice_debug: bool = False
@@ -98,7 +101,7 @@ class Settings(BaseSettings):
     @property
     def is_azure_foundry_configured(self) -> bool:
         """Check if Azure Foundry is properly configured."""
-        return bool(self.azure_foundry_endpoint and self.azure_foundry_api_key)
+        return bool(self.azure_foundry_project_endpoint and self.azure_foundry_api_key)
 
     @property
     def is_azure_ad_configured(self) -> bool:
