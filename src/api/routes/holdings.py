@@ -20,7 +20,7 @@ from src.schemas.holding import (
     UpdateHoldingUnitsApiRequest,
 )
 from src.services.currency_conversion_service import CurrencyConversionService
-from src.services.eod_market_data_tool import EodMarketDataTool
+from src.services.eod_market_data_service import EodMarketDataTool
 from src.services.holding_service import HoldingService
 from src.services.metrics_service import MetricsService, get_metrics_service
 from src.services.pricing_calculation_service import PricingCalculationService

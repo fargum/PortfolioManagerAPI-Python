@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from langchain_core.tools import StructuredTool
 
-from src.services.eod_market_data_tool import EodMarketDataTool
+from src.services.eod_market_data_service import EodMarketDataTool
 
 logger = logging.getLogger(__name__)
 

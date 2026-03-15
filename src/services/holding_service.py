@@ -18,7 +18,7 @@ from src.services.result_objects import (
     ErrorCode,
     HoldingDict
 )
-from src.services.eod_market_data_tool import EodMarketDataTool
+from src.services.eod_market_data_service import EodMarketDataTool
 from src.services.pricing_calculation_service import PricingCalculationService
 
 logger = logging.getLogger(__name__)

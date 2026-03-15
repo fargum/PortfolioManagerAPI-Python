@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 
 from src.api.main import app
 from src.services.currency_conversion_service import CurrencyConversionService
-from src.services.eod_market_data_tool import EodMarketDataTool
+from src.services.eod_market_data_service import EodMarketDataTool
 from src.services.pricing_calculation_service import PricingCalculationService
 
 
