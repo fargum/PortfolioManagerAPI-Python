@@ -1,13 +1,12 @@
 """Result objects for service layer operations."""
 from dataclasses import dataclass, field
-from decimal import Decimal
 from datetime import date
+from decimal import Decimal
 from enum import Enum
-from typing import Optional, TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, Optional, TypedDict
 
 if TYPE_CHECKING:
-    from src.db.models.holding import Holding
-    from src.db.models.instrument import Instrument
+    pass
 
 
 class HoldingDict(TypedDict):
@@ -19,12 +18,14 @@ class HoldingDict(TypedDict):
     platform_name: str
     ticker: str
     instrument_name: str
-    units: Decimal
+    unit_amount: Decimal
     bought_value: Decimal
     current_value: Decimal
     current_price: Optional[Decimal]
     gain_loss: Decimal
     gain_loss_percentage: Decimal
+    daily_profit_loss: Optional[Decimal]
+    daily_profit_loss_percentage: Optional[Decimal]
     currency_code: str
     valuation_date: date
 

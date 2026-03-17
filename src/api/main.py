@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from src.api.routes import chat, holdings
+from src.api.routes import chat, holdings, instruments
 from src.core.ai_config import AIConfig
 from src.core.auth import get_azure_scheme
 from src.core.config import settings
@@ -59,6 +59,9 @@ def configure_logging() -> None:
 
 # Configure logging first
 configure_logging()
+
+# Enable debug logging for Azure auth to diagnose token issues
+logging.getLogger("fastapi_azure_auth").setLevel(logging.DEBUG)
 
 # Configure OpenTelemetry
 configure_telemetry()
@@ -139,6 +142,7 @@ async def global_exception_handler(request, exc):
 # Include routers
 app.include_router(holdings.router)
 app.include_router(chat.router)
+app.include_router(instruments.router)
 
 
 @app.get("/", tags=["Health"])

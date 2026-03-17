@@ -18,22 +18,22 @@ def create_portfolio_analysis_tool(portfolio_analysis_service: PortfolioAnalysis
     """
     Factory function to create a portfolio analysis tool with bound context.
     Creates a new tool instance per-request to avoid global state race conditions.
-    
+
     Args:
         portfolio_analysis_service: Service for portfolio analysis
         account_id: Authenticated user's account ID
-        
+
     Returns:
         StructuredTool configured for this specific request context
     """
-    
+
     async def analyze_portfolio_performance(
         analysis_date: Annotated[str, "Analysis date. Use 'today' or current date (YYYY-MM-DD) for real-time analysis, or specify historical date in various formats (YYYY-MM-DD, DD/MM/YYYY, DD MMMM YYYY, etc.)"]
     ) -> dict:
         """Analyze portfolio performance and generate insights for the authenticated user's account on a specific date.
-        
+
         For current/today performance, use today's date to get real-time analysis.
-        
+
         Returns a dictionary containing:
         - AccountId: Account identifier
         - AnalysisDate: Date of analysis
@@ -49,19 +49,19 @@ def create_portfolio_analysis_tool(portfolio_analysis_service: PortfolioAnalysis
             if not analysis_date or analysis_date.lower() in ['today', 'current', 'now']:
                 effective_date = datetime.now().strftime("%Y-%m-%d")
                 logger.info(f"Interpreted '{analysis_date}' as today: {effective_date}")
-            
+
             # Parse the date
             parsed_date = DateUtilities.parse_date_time(effective_date)
-            
+
             logger.info(f"Analyzing portfolio performance for account {account_id} on {parsed_date}")
-            
+
             # Get analysis from service
             analysis = await portfolio_analysis_service.analyze_portfolio_performance_async(
                 account_id, parsed_date
             )
-            
+
             return analysis
-            
+
         except Exception as e:
             logger.error(f"Error analyzing portfolio performance: {str(e)}", exc_info=True)
             return {
@@ -69,7 +69,7 @@ def create_portfolio_analysis_tool(portfolio_analysis_service: PortfolioAnalysis
                 "AccountId": account_id,
                 "AnalysisDate": analysis_date
             }
-    
+
     return StructuredTool.from_function(
         coroutine=analyze_portfolio_performance,
         name="analyze_portfolio_performance",

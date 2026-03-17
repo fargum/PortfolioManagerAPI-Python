@@ -137,14 +137,14 @@ class VoiceResponseAdapter:
     def _extract_voice_summary(self) -> Optional[str]:
         """
         Extract the VOICE_SUMMARY section from the AI response.
-        
+
         The agent is instructed to format responses with:
         **VOICE_SUMMARY**
         <summary text>
-        
+
         **DETAILED**
         <full response>
-        
+
         Returns:
             Extracted voice summary text, or None if not found
         """
@@ -152,31 +152,31 @@ class VoiceResponseAdapter:
         # Handles: **VOICE_SUMMARY**, **VOICE SUMMARY**, **Voice Summary**, etc.
         pattern = r"\*\*\s*VOICE[_\s]?SUMMARY\s*\*\*\s*[:\n]?(.+?)(?=\*\*\s*DETAILED|$)"
         match = re.search(pattern, self.final_text, re.DOTALL | re.IGNORECASE)
-        
+
         if match:
             summary = match.group(1).strip()
             # Clean up any residual markdown
             summary = sanitize_for_tts(summary)
             logger.info(f"Extracted VOICE_SUMMARY ({len(summary.split())} words)")
             return summary if summary else None
-        
+
         logger.info("No VOICE_SUMMARY section found in AI response, using fallback")
         return None
-    
+
     def _extract_detailed_section(self) -> str:
         """
         Extract the DETAILED section from the AI response.
-        
+
         Returns:
             The detailed section, or the full response if no sections found
         """
         # Look for **DETAILED** section
         pattern = r"\*\*DETAILED\*\*\s*\n(.+)"
         match = re.search(pattern, self.final_text, re.DOTALL | re.IGNORECASE)
-        
+
         if match:
             return match.group(1).strip()
-        
+
         # If no DETAILED section, check if there's a VOICE_SUMMARY to remove
         voice_pattern = r"\*\*VOICE_SUMMARY\*\*\s*\n.+?(?=\n\*\*|$)"
         cleaned = re.sub(voice_pattern, "", self.final_text, flags=re.DOTALL | re.IGNORECASE)
@@ -194,7 +194,7 @@ class VoiceResponseAdapter:
         if voice_summary:
             logger.info(f"Using AI-generated voice summary ({len(voice_summary)} chars)")
             return voice_summary
-        
+
         # Fallback: heuristic extraction from full response
         logger.info("Using heuristic extraction for speak_text (fallback)")
         text = self.final_text

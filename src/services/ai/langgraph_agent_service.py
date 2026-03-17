@@ -8,9 +8,9 @@ import logging
 import time
 from typing import Any, AsyncIterator, List, Literal, Optional
 
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool
-from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, MessagesState, StateGraph
@@ -28,7 +28,6 @@ from src.services.ai.tools.portfolio_analysis_tool import create_portfolio_analy
 from src.services.ai.tools.portfolio_comparison_tool import create_portfolio_comparison_tool
 from src.services.ai.tools.portfolio_holdings_tool import create_portfolio_holdings_tool
 from src.services.ai.tools.real_time_prices_tool import create_real_time_prices_tool
-
 from src.services.conversation_thread_service import ConversationThreadService
 from src.services.currency_conversion_service import CurrencyConversionService
 from src.services.eod_market_data_service import EodMarketDataTool
@@ -126,27 +125,27 @@ class LangGraphAgentService:
     ) -> List[BaseTool]:
         """
         Create tools with account context and database-backed services.
-        
+
         Uses factory pattern to create new tool instances per-request, avoiding
         global state race conditions that could cause cross-account data leakage.
-        
+
         Security: account_id is injected from authenticated request, not from AI.
 
         Args:
             account_id: Authenticated user's account ID
             holding_service: Service for accessing holding data (with DB session)
             portfolio_analysis_service: Service for portfolio analysis (with DB session)
-            
+
         Returns:
             List of tools configured for this specific request context
         """
         tools: List[BaseTool] = []
-        
+
         # Create portfolio tools with bound account context
         tools.append(create_portfolio_holdings_tool(holding_service, account_id))
         tools.append(create_portfolio_analysis_tool(portfolio_analysis_service, account_id))
         tools.append(create_portfolio_comparison_tool(portfolio_analysis_service, account_id))
-        
+
         # Create Tavily-powered market intelligence tools
         news_tool, fundamentals_tool, overview_tool, market_tool = (
             create_market_intelligence_tools(self.tavily_service)
@@ -167,7 +166,7 @@ class LangGraphAgentService:
                 f"Created {len(tools)} tools for account {account_id} "
                 f"(Tavily not configured — market intelligence tools degraded)"
             )
-        
+
         return tools
 
     def _create_agent_node(self, model_with_tools, system_prompt: str, model_name: Optional[str] = None):
@@ -513,7 +512,7 @@ class LangGraphAgentService:
 
         Sets up services, creates per-request tools, creates/retrieves conversation thread,
         and builds the graph workflow.
-        
+
         IMPORTANT: Tools are created per-request using factory functions to avoid
         global state race conditions that could cause cross-account data leakage.
 

@@ -3,7 +3,8 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import SecurityScopes
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
@@ -47,7 +48,8 @@ def get_azure_scheme() -> Optional[Any]:
             tenant_id=settings.azure_ad_tenant_id,
             scopes={
                 f"api://{settings.azure_ad_client_id}/Portfolio.ReadWrite": "Portfolio access"
-            }
+            },
+            allow_guest_users=True,
         )
 
     return _azure_scheme
@@ -116,8 +118,27 @@ async def get_current_user_from_token(
     )
 
 
+async def _get_token(request: Request) -> Optional[dict]:
+    """Extract and validate the Azure AD token from the request."""
+    scheme = get_azure_scheme()
+    if scheme is None:
+        return None
+    auth_header = request.headers.get("Authorization", "MISSING")
+    logger.info(f"Auth header present: {auth_header != 'MISSING'}, value prefix: {auth_header[:20] if auth_header != 'MISSING' else 'N/A'}")
+    try:
+        result = await scheme(request, SecurityScopes())
+        if result is None:
+            return None
+        claims = result.model_dump() if hasattr(result, "model_dump") else dict(result)
+        logger.info(f"Token validated successfully for user: {claims.get('preferred_username') or claims.get('oid')}")
+        return claims
+    except Exception as e:
+        logger.warning(f"Token validation failed: {type(e).__name__}: {e}")
+        raise
+
+
 async def get_current_user(
-    token: Optional[dict] = Depends(get_azure_scheme)
+    token: Optional[dict] = Depends(_get_token)
 ) -> CurrentUser:
     """
     FastAPI dependency to get current user from Azure AD token.

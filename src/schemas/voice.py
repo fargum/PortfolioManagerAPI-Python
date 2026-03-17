@@ -127,20 +127,20 @@ def sanitize_for_tts(text: str) -> str:
 
     # Remove ticker symbols in parentheses: (AAPL.US), (BA.LSE), (MSFT)
     text = re.sub(r"\s*\([A-Z0-9]+(?:\.[A-Z]+)?\)", "", text)
-    
+
     # Replace arrows with words
     text = text.replace("→", " to ")
     text = text.replace("←", " from ")
     text = text.replace("↑", " up ")
     text = text.replace("↓", " down ")
-    
+
     # Replace plus/minus signs with words (but not in numbers like +2.3%)
     text = re.sub(r"(?<!\d)\+(?=\s|£|\$|€|\d)", "plus ", text)
     text = re.sub(r"(?<!\d)[−\-](?=\s|£|\$|€|\d)", "minus ", text)
-    
+
     # Replace equals sign
     text = text.replace(" = ", " equals ")
-    
+
     # Remove colon-separated labels often used in summaries
     # e.g., "Portfolio value: £644,400" -> "Portfolio value £644,400"
     text = re.sub(r":\s*(?=[£$€\d])", " ", text)

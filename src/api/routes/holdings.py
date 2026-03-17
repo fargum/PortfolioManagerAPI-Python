@@ -1,8 +1,10 @@
 from datetime import datetime
+from decimal import Decimal
 from functools import lru_cache
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -125,7 +127,7 @@ async def get_holdings_by_date(
                 logger.info(f"Found {response.total_holdings} holdings for account {account_id}")
                 span.set_attribute("holdings.count", response.total_holdings)
 
-                return response
+                return JSONResponse(content=jsonable_encoder(response.model_dump(by_alias=True), custom_encoder={Decimal: float}))
             except HTTPException:
                 raise
             except Exception as e:

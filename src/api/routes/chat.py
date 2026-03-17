@@ -1,4 +1,5 @@
 """AI Chat routes for streaming conversations with LangGraph agents."""
+import json
 import logging
 import time
 from functools import lru_cache
@@ -12,7 +13,6 @@ from src.core.ai_config import AIConfig
 from src.core.auth import get_current_account_id
 from src.core.config import Settings
 from src.core.config import settings as app_settings
-from src.services.tavily_service import TavilyService
 from src.core.telemetry import get_tracer
 from src.db.session import get_db
 from src.schemas.voice import UIResponse, VoiceResponse
@@ -20,6 +20,7 @@ from src.services.ai.agent_prompt_service import AgentPromptService
 from src.services.ai.langgraph_agent_service import LangGraphAgentService
 from src.services.ai.voice_adapter import VoiceResponseAdapter
 from src.services.metrics_service import MetricsService, get_metrics_service
+from src.services.tavily_service import TavilyService
 
 logger = logging.getLogger(__name__)
 
@@ -97,12 +98,12 @@ def get_agent_service() -> Optional[LangGraphAgentService]:
     Database session is passed per request when calling stream_chat methods.
     """
     ai_config = get_ai_config()
-    
+
     # Return None if AI is not configured - allows app to start without AI
     if not ai_config.is_configured():
         logger.warning("AI service not configured - Azure Foundry credentials not set")
         return None
-    
+
     try:
         prompt_service = get_prompt_service()
         settings = get_settings()
@@ -181,6 +182,61 @@ async def health_check(ai_config: AIConfig = Depends(get_ai_config)):
     )
 
 
+@router.get("/tools")
+async def get_available_tools():
+    """Returns the list of AI tools available to the portfolio agent."""
+    return [
+        {
+            "name": "get_portfolio_holdings",
+            "description": "Retrieve all holdings in the user's portfolio for a given date, including current prices and valuations.",
+            "parameters": {},
+            "category": "Portfolio",
+        },
+        {
+            "name": "analyze_portfolio_performance",
+            "description": "Analyse portfolio performance between two dates, including returns, allocation, and top/bottom performers.",
+            "parameters": {},
+            "category": "Portfolio",
+        },
+        {
+            "name": "compare_portfolio_performance",
+            "description": "Compare portfolio performance across multiple time periods side by side.",
+            "parameters": {},
+            "category": "Portfolio",
+        },
+        {
+            "name": "get_real_time_prices",
+            "description": "Fetch the latest real-time or end-of-day prices for a list of ticker symbols.",
+            "parameters": {},
+            "category": "Market Data",
+        },
+        {
+            "name": "search_recent_news",
+            "description": "Search for recent financial news articles about a company, sector, or market topic.",
+            "parameters": {},
+            "category": "Market Intelligence",
+        },
+        {
+            "name": "research_company_fundamentals",
+            "description": "Research fundamental financial data for a company, such as revenue, earnings, and valuation ratios.",
+            "parameters": {},
+            "category": "Market Intelligence",
+        },
+        {
+            "name": "get_company_overview",
+            "description": "Get a high-level overview of a company including business description, sector, and key metrics.",
+            "parameters": {},
+            "category": "Market Intelligence",
+        },
+        {
+            "name": "get_market_overview",
+            "description": "Get a broad overview of current market conditions, indices, and sentiment.",
+            "parameters": {},
+            "category": "Market Intelligence",
+        },
+    ]
+
+
 @router.post("/stream")
 async def stream_chat(
     request: ChatRequest,
@@ -246,11 +302,9 @@ async def stream_chat(
                         thread_id=request.thread_id,
                         model_id=request.model_id,
                     ):
-                        # Send token as Server-Sent Event
-                        yield f"data: {token}\n\n"
+                        yield json.dumps({"MessageType": "content", "Content": token}) + "\n"
 
-                    # Send completion signal
-                    yield "data: [DONE]\n\n"
+                    yield json.dumps({"MessageType": "completion"}) + "\n"
 
                     # Record success metrics
                     duration = time.perf_counter() - start_time
@@ -264,7 +318,8 @@ async def stream_chat(
                     metrics.record_ai_chat_request_duration(
                         duration, account_id, "stream", effective_model, "error"
                     )
-                    yield f"data: [ERROR: {str(e)}]\n\n"
+                    yield json.dumps({"MessageType": "content", "Content": f"Error: {str(e)}"}) + "\n"
+                    yield json.dumps({"MessageType": "completion"}) + "\n"
 
             return StreamingResponse(
                 generate(),
@@ -286,6 +341,7 @@ async def stream_chat(
             )
 
 
+@router.post("/query", response_model=Union[UIResponse, VoiceResponse], include_in_schema=False)
 @router.post("/respond", response_model=Union[UIResponse, VoiceResponse])
 async def respond_chat(
     request: ChatRequest,

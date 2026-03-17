@@ -1,6 +1,7 @@
 """Database session management and connection pooling."""
 from typing import AsyncGenerator
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
 
 from src.core.config import settings
@@ -31,20 +32,12 @@ Base = declarative_base()
 
 # Import all models to ensure they are registered with SQLAlchemy
 # This must happen after Base is created but before any queries
-from src.db.models import (  # noqa: E402
-    Account,
-    Holding,
-    Instrument,
-    Platform,
-    Portfolio,
-    ExchangeRate
-)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     Dependency function to get database session.
-    
+
     Usage in FastAPI:
         @app.get("/endpoint")
         async def endpoint(db: AsyncSession = Depends(get_db)):

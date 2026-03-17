@@ -1,8 +1,9 @@
 """Pydantic schemas for Holdings API requests and responses."""
-from pydantic import BaseModel, Field, ConfigDict
-from datetime import datetime, date
+from datetime import date
 from decimal import Decimal
 from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class InstrumentInfo(BaseModel):
@@ -13,7 +14,7 @@ class InstrumentInfo(BaseModel):
     currency_code: str = Field(alias="currencyCode")
     quote_unit: Optional[str] = Field(None, alias="quoteUnit")
     instrument_type_id: Optional[int] = Field(None, alias="instrumentTypeId")
-    
+
     model_config = ConfigDict(populate_by_name=True)
 
 
@@ -25,15 +26,17 @@ class PortfolioHoldingDto(BaseModel):
     platform_name: str = Field(alias="platformName")
     ticker: str
     instrument_name: str = Field(alias="instrumentName")
-    units: Decimal
+    unit_amount: Decimal = Field(alias="unitAmount")
     bought_value: Decimal = Field(alias="boughtValue")
     current_value: Decimal = Field(alias="currentValue")
     current_price: Optional[Decimal] = Field(None, alias="currentPrice")
     gain_loss: Decimal = Field(alias="gainLoss")
     gain_loss_percentage: Decimal = Field(alias="gainLossPercentage")
+    daily_profit_loss: Optional[Decimal] = Field(None, alias="dailyProfitLoss")
+    daily_profit_loss_percentage: Optional[Decimal] = Field(None, alias="dailyProfitLossPercentage")
     currency_code: str = Field(alias="currencyCode")
     valuation_date: date = Field(alias="valuationDate")
-    
+
     model_config = ConfigDict(populate_by_name=True)
 
 
@@ -46,7 +49,7 @@ class AccountHoldingsResponse(BaseModel):
     total_bought_value: Decimal = Field(alias="totalBoughtValue")
     total_gain_loss: Decimal = Field(alias="totalGainLoss")
     total_gain_loss_percentage: Decimal = Field(alias="totalGainLossPercentage")
-    
+
     model_config = ConfigDict(populate_by_name=True)
 
 
@@ -60,7 +63,7 @@ class AddHoldingApiRequest(BaseModel):
     instrument_type_id: Optional[int] = Field(None, alias="instrumentTypeId")
     currency_code: str = Field(default="USD", alias="currencyCode")
     quote_unit: Optional[str] = Field(None, alias="quoteUnit")
-    
+
     model_config = ConfigDict(populate_by_name=True)
 
 
@@ -73,7 +76,7 @@ class AddHoldingApiResponse(BaseModel):
     instrument: Optional[InstrumentInfo] = None
     current_price: Optional[Decimal] = Field(None, alias="currentPrice")
     current_value: Optional[Decimal] = Field(None, alias="currentValue")
-    
+
     model_config = ConfigDict(populate_by_name=True)
 
 
@@ -91,7 +94,7 @@ class UpdateHoldingApiResponse(BaseModel):
     previous_current_value: Decimal = Field(alias="previousCurrentValue")
     new_current_value: Decimal = Field(alias="newCurrentValue")
     ticker: Optional[str] = None
-    
+
     model_config = ConfigDict(populate_by_name=True)
 
 
@@ -102,6 +105,6 @@ class DeleteHoldingApiResponse(BaseModel):
     deleted_holding_id: Optional[int] = Field(None, alias="deletedHoldingId")
     deleted_ticker: Optional[str] = Field(None, alias="deletedTicker")
     portfolio_id: Optional[int] = Field(None, alias="portfolioId")
-    
+
     model_config = ConfigDict(populate_by_name=True)
 
