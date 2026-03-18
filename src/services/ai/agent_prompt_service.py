@@ -1,6 +1,7 @@
 """Service for managing AI agent prompts from configuration."""
 import json
 import logging
+from datetime import date
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -70,39 +71,31 @@ class AgentPromptService:
             base_instructions = advisor_config.get("BaseInstructions", "")
             base_instructions = base_instructions.replace("{accountId}", str(account_id))
             prompt_parts.append(base_instructions)
+            prompt_parts.append(f"Current Date: {date.today().strftime('%d %B %Y')}")
             prompt_parts.append("")
 
             # Tool usage guidance
             tool_guidance = advisor_config.get("ToolUsageGuidance", {})
             if tool_guidance:
                 prompt_parts.append("WHEN TO USE YOUR TOOLS:")
-                prompt_parts.append("You have some great tools at your disposal, but only use them when someone actually wants portfolio or market information:")
                 prompt_parts.append("")
 
-                prompt_parts.append("✅ Perfect times to use tools:")
+                prompt_parts.append("Use tools when someone asks:")
                 prompt_parts.extend(f'- "{example}"' for example in tool_guidance.get("WhenToUseTools", []))
                 prompt_parts.append("")
 
-                prompt_parts.append("❌ Just have a normal chat for:")
+                prompt_parts.append("Just have a normal chat for:")
                 prompt_parts.extend(f'- "{example}"' for example in tool_guidance.get("WhenNotToUseTools", []))
                 prompt_parts.append("")
 
-                # Tool combinations
-                if tool_combos := tool_guidance.get("ToolCombinations", []):
-                    prompt_parts.append("TOOL COMBINATIONS:")
-                    prompt_parts.extend(tool_combos)
+                # Critical rule
+                if critical_rule := tool_guidance.get("CriticalRule", ""):
+                    prompt_parts.append(critical_rule)
                     prompt_parts.append("")
 
-                # Available tools
-                if available_tools := tool_guidance.get("AvailableTools", []):
-                    prompt_parts.append("YOUR AVAILABLE TOOLS:")
-                    prompt_parts.extend(f"- {tool}" for tool in available_tools)
-                    prompt_parts.append("")
-
-                # News and sentiment guidance
-                if news_guidance := tool_guidance.get("NewsAndSentimentGuidance", []):
-                    prompt_parts.append("CRITICAL - NEWS AND SENTIMENT TOOLS:")
-                    prompt_parts.extend(news_guidance)
+                # Parallel tool rule
+                if parallel_rule := tool_guidance.get("ParallelToolRule", ""):
+                    prompt_parts.append(parallel_rule)
                     prompt_parts.append("")
 
             # Communication style

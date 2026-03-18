@@ -20,6 +20,9 @@ services:
       # EOD Historical Data
       EOD_API_TOKEN: ${EOD_API_TOKEN}
       EOD_API_BASE_URL: ${EOD_API_BASE_URL:-https://eodhd.com/api}
+
+      # Tavily Market Intelligence
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       
       # Azure AD Authentication
       AZURE_AD_TENANT_ID: ${AZURE_AD_TENANT_ID:-}

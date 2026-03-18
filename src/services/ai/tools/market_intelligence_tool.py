@@ -8,6 +8,7 @@ Four tools are provided:
 - get_company_overview: business model and competitive position
 - get_market_overview: daily market conditions and top financial news
 """
+import json
 import logging
 from typing import List, Optional, Tuple
 
@@ -56,19 +57,19 @@ def create_market_intelligence_tools(
             Each result contains title, url, content, and published_date.
         """
         if not tavily_service:
-            return {**_NOT_CONFIGURED, "Results": []}
+            return json.dumps({**_NOT_CONFIGURED, "Results": []})
         try:
             data = await tavily_service.search_recent_news(tickers, company_names)
             if not data:
-                return {
+                return json.dumps({
                     "Status": "Error",
                     "Message": "No data returned from Tavily",
                     "Results": [],
-                }
-            return {
+                })
+            return json.dumps({
                 "Status": "Success",
-                "Answer": data.get("answer", ""),
-                "Results": [
+                "Summary": data.get("answer", ""),
+                "News": [
                     {
                         "Title": r.get("title", ""),
                         "Url": r.get("url", ""),
@@ -77,10 +78,10 @@ def create_market_intelligence_tools(
                     }
                     for r in data.get("results", [])
                 ],
-            }
+            })
         except Exception as exc:
             logger.error("Error in search_recent_news: %s", exc, exc_info=True)
-            return {"Status": "Error", "Message": str(exc), "Results": []}
+            return json.dumps({"Status": "Error", "Message": str(exc)})
 
     async def research_company_fundamentals(
         ticker: str, company_name: str = ""
@@ -99,18 +100,18 @@ def create_market_intelligence_tools(
             Dictionary with Status, AI-generated fundamentals summary, and source list.
         """
         if not tavily_service:
-            return {**_NOT_CONFIGURED, "Sources": []}
+            return json.dumps({**_NOT_CONFIGURED, "Sources": []})
         try:
             data = await tavily_service.research_company_fundamentals(
                 ticker, company_name
             )
             if not data:
-                return {
+                return json.dumps({
                     "Status": "Error",
                     "Message": "No data returned from Tavily",
                     "Sources": [],
-                }
-            return {
+                })
+            return json.dumps({
                 "Status": "Success",
                 "Ticker": ticker,
                 "Summary": data.get("answer", ""),
@@ -118,12 +119,12 @@ def create_market_intelligence_tools(
                     {"Title": r.get("title", ""), "Url": r.get("url", "")}
                     for r in data.get("results", [])
                 ],
-            }
+            })
         except Exception as exc:
             logger.error(
                 "Error in research_company_fundamentals: %s", exc, exc_info=True
             )
-            return {"Status": "Error", "Message": str(exc), "Sources": []}
+            return json.dumps({"Status": "Error", "Message": str(exc)})
 
     async def get_company_overview(
         ticker: str, company_name: str = ""
@@ -142,16 +143,16 @@ def create_market_intelligence_tools(
             Dictionary with Status, AI-generated overview summary, and source list.
         """
         if not tavily_service:
-            return {**_NOT_CONFIGURED, "Sources": []}
+            return json.dumps({**_NOT_CONFIGURED, "Sources": []})
         try:
             data = await tavily_service.get_company_overview(ticker, company_name)
             if not data:
-                return {
+                return json.dumps({
                     "Status": "Error",
                     "Message": "No data returned from Tavily",
                     "Sources": [],
-                }
-            return {
+                })
+            return json.dumps({
                 "Status": "Success",
                 "Ticker": ticker,
                 "Overview": data.get("answer", ""),
@@ -159,10 +160,10 @@ def create_market_intelligence_tools(
                     {"Title": r.get("title", ""), "Url": r.get("url", "")}
                     for r in data.get("results", [])
                 ],
-            }
+            })
         except Exception as exc:
             logger.error("Error in get_company_overview: %s", exc, exc_info=True)
-            return {"Status": "Error", "Message": str(exc), "Sources": []}
+            return json.dumps({"Status": "Error", "Message": str(exc)})
 
     async def get_market_overview(focus: Optional[str] = None) -> dict:
         """Get current market conditions, major index movements, and top financial news.
@@ -178,19 +179,19 @@ def create_market_intelligence_tools(
             Dictionary with Status, AI-generated market summary, and news items.
         """
         if not tavily_service:
-            return {**_NOT_CONFIGURED, "NewsItems": []}
+            return json.dumps({**_NOT_CONFIGURED, "NewsItems": []})
         try:
             data = await tavily_service.get_market_overview(focus)
             if not data:
-                return {
+                return json.dumps({
                     "Status": "Error",
                     "Message": "No data returned from Tavily",
                     "NewsItems": [],
-                }
-            return {
+                })
+            return json.dumps({
                 "Status": "Success",
-                "MarketSummary": data.get("answer", ""),
-                "NewsItems": [
+                "Summary": data.get("answer", ""),
+                "News": [
                     {
                         "Title": r.get("title", ""),
                         "Url": r.get("url", ""),
@@ -199,10 +200,10 @@ def create_market_intelligence_tools(
                     }
                     for r in data.get("results", [])
                 ],
-            }
+            })
         except Exception as exc:
             logger.error("Error in get_market_overview: %s", exc, exc_info=True)
-            return {"Status": "Error", "Message": str(exc), "NewsItems": []}
+            return json.dumps({"Status": "Error", "Message": str(exc)})
 
     search_recent_news_tool = StructuredTool.from_function(
         coroutine=search_recent_news,
