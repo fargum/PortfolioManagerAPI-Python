@@ -65,14 +65,26 @@ def create_portfolio_holdings_tool(holding_service: HoldingService, account_id: 
                     "Date": effective_date
                 }
 
+            # Calculate portfolio-level daily P/L totals from holdings
+            total_daily_pnl = sum(
+                float(h.daily_profit_loss) for h in response.holdings
+                if h.daily_profit_loss is not None
+            )
+            total_value = float(response.total_current_value)
+            # Percentage based on yesterday's value (today's value minus today's change)
+            yesterday_value = total_value - total_daily_pnl
+            total_daily_pnl_pct = (total_daily_pnl / yesterday_value * 100) if yesterday_value != 0 else 0.0
+
             # Format response using service-calculated totals
             return {
                 "AccountId": response.account_id,
                 "Date": effective_date,
-                "TotalValue": float(response.total_current_value),
+                "TotalValue": total_value,
                 "TotalBoughtValue": float(response.total_bought_value),
                 "TotalGainLoss": float(response.total_gain_loss),
                 "TotalGainLossPercentage": float(response.total_gain_loss_percentage),
+                "TotalDailyProfitLoss": total_daily_pnl,
+                "TotalDailyProfitLossPercentage": total_daily_pnl_pct,
                 "TotalHoldings": response.total_holdings,
                 "Holdings": [
                     {
@@ -86,6 +98,8 @@ def create_portfolio_holdings_tool(holding_service: HoldingService, account_id: 
                         "UnrealizedGainLoss": float(h.gain_loss),
                         "GainLoss": float(h.gain_loss),
                         "GainLossPercentage": float(h.gain_loss_percentage),
+                        "DailyProfitLoss": float(h.daily_profit_loss) if h.daily_profit_loss is not None else 0.0,
+                        "DailyProfitLossPercentage": float(h.daily_profit_loss_percentage) if h.daily_profit_loss_percentage is not None else 0.0,
                     }
                     for h in response.holdings
                 ]

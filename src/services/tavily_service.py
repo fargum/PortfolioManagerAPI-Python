@@ -36,6 +36,9 @@ class TavilyService:
         "ft.com",
         "bloomberg.com",
         "investing.com",
+        "thisismoney.co.uk",
+        "cityam.com",
+        "proactiveinvestors.co.uk",
     ]
 
     def __init__(
@@ -80,7 +83,7 @@ class TavilyService:
         query_parts = " ".join(tickers)
         if company_names:
             query_parts = f"{query_parts} {company_names}"
-        query = f"{query_parts} stock news"
+        query = f"{query_parts} stock market news UK global"
 
         return await self._search(
             {
@@ -88,6 +91,7 @@ class TavilyService:
                 "topic": "news",
                 "time_range": "week",
                 "max_results": 10,
+                "include_domains": self.NEWS_DOMAINS,
             }
         )
 
@@ -130,7 +134,7 @@ class TavilyService:
 
     async def get_market_overview(self, focus: Optional[str] = None) -> dict | None:
         """Get market conditions, major indices, and top financial news."""
-        query = "stock market news today major indices"
+        query = "stock market news today FTSE 100 S&P 500 European markets global indices"
         if focus:
             query = f"{query} {focus}"
 

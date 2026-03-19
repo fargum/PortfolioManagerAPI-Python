@@ -69,6 +69,8 @@ class PortfolioAnalysisService:
                     "BoughtValue": float(h.bought_value),
                     "GainLoss": float(h.gain_loss),
                     "GainLossPercentage": float(h.gain_loss_percentage),
+                    "DailyProfitLoss": float(h.daily_profit_loss) if h.daily_profit_loss is not None else 0.0,
+                    "DailyProfitLossPercentage": float(h.daily_profit_loss_percentage) if h.daily_profit_loss_percentage is not None else 0.0,
                     "TotalReturn": float(h.gain_loss),
                     "TotalReturnPercentage": float((h.current_value - h.bought_value) / h.bought_value) if h.bought_value > 0 else 0.0
                 }
@@ -80,6 +82,11 @@ class PortfolioAnalysisService:
             total_gain_loss = float(response.total_gain_loss)
             total_gain_loss_percentage = float(response.total_gain_loss_percentage)
 
+            # Calculate portfolio-level daily P/L totals
+            total_day_change = sum(h["DailyProfitLoss"] for h in holding_performance)
+            yesterday_value = total_value - total_day_change
+            total_day_change_pct = (total_day_change / yesterday_value * 100) if yesterday_value != 0 else 0.0
+
             # Generate performance metrics
             metrics = self._calculate_performance_metrics(holding_performance)
 
@@ -87,6 +94,8 @@ class PortfolioAnalysisService:
                 "AccountId": account_id,
                 "AnalysisDate": analysis_date.isoformat(),
                 "TotalValue": total_value,
+                "DayChange": total_day_change,
+                "DayChangePercentage": total_day_change_pct,
                 "GainLoss": total_gain_loss,
                 "GainLossPercentage": total_gain_loss_percentage,
                 "HoldingPerformance": holding_performance,

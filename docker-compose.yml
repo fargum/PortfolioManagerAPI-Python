@@ -23,7 +23,7 @@ services:
 
       # Tavily Market Intelligence
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
-      
+
       # Azure AD Authentication
       AZURE_AD_TENANT_ID: ${AZURE_AD_TENANT_ID:-}
       AZURE_AD_CLIENT_ID: ${AZURE_AD_CLIENT_ID:-}
