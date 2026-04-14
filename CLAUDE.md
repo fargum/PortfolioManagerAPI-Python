@@ -2,6 +2,26 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Behavioral Guidelines
+
+### Before Implementing
+- State assumptions explicitly before writing code. If uncertain, ask.
+- If multiple interpretations exist, present them — don't pick silently.
+- If a simpler approach exists, say so and push back.
+
+### Surgical Changes
+- Don't improve, reformat, or refactor code adjacent to your changes.
+- Remove imports/variables/functions that **your** changes made unused.
+- Don't remove pre-existing dead code unless asked — mention it instead.
+
+### Multi-Step Tasks
+State a brief plan with verifiable checkpoints before starting:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+```
+For bug fixes: write a test reproducing it, then make it pass.
+
 ## Build and Development Commands
 
 ```bash
