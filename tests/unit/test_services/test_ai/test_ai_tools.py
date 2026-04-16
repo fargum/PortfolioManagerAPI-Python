@@ -55,7 +55,7 @@ def sample_holdings_response():
             platform_name="Platform A",
             ticker="AAPL",
             instrument_name="Apple Inc.",
-            units=Decimal("10"),
+            unit_amount=Decimal("100.00"),
             bought_value=Decimal("1000.00"),
             current_value=Decimal("1500.00"),
             current_price=Decimal("150.00"),
@@ -266,8 +266,8 @@ class TestSearchRecentNewsTool:
         result = await news_tool.ainvoke({"tickers": ["AAPL"]})
 
         assert result["Status"] == "Success"
-        assert result["Answer"] == "Apple news summary"
-        assert len(result["Results"]) == 1
+        assert result["Summary"] == "Apple news summary"
+        assert len(result["News"]) == 1
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -352,8 +352,8 @@ class TestGetMarketOverviewTool:
         result = await market_tool.ainvoke({})
 
         assert result["Status"] == "Success"
-        assert result["MarketSummary"] == "Markets up today"
-        assert len(result["NewsItems"]) == 1
+        assert result["Summary"] == "Markets up today"
+        assert len(result["News"]) == 1
 
     @pytest.mark.unit
     @pytest.mark.asyncio
