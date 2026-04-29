@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from src.api.routes import chat, holdings, instruments
+from src.api.routes import chat, holdings, instruments, watches
 from src.core.ai_config import AIConfig
 from src.core.auth import get_azure_scheme
 from src.core.config import settings
@@ -143,6 +143,8 @@ async def global_exception_handler(request, exc):
 app.include_router(holdings.router)
 app.include_router(chat.router)
 app.include_router(instruments.router)
+app.include_router(watches.router)
+app.include_router(watches.alerts_router)
 
 
 @app.get("/", tags=["Health"])

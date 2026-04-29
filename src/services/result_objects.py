@@ -75,3 +75,39 @@ class DeleteHoldingResult(ServiceResult):
     deleted_holding_id: Optional[int] = None
     deleted_ticker: Optional[str] = None
     portfolio_id: Optional[int] = None
+
+
+@dataclass
+class WatchResult(ServiceResult):
+    """Result for Watch operations."""
+    watch: Optional[Any] = None
+
+
+@dataclass
+class WatchRunResult(ServiceResult):
+    """Result for WatchRun operations."""
+    watch_run: Optional[Any] = None
+
+
+@dataclass
+class AlertResult(ServiceResult):
+    """Result for Alert operations."""
+    alert: Optional[Any] = None
+
+
+@dataclass
+class WatchListResult(ServiceResult):
+    """Result for listing watches."""
+    watches: list = field(default_factory=list)
+
+
+@dataclass
+class WatchRunListResult(ServiceResult):
+    """Result for listing watch runs."""
+    watch_runs: list = field(default_factory=list)
+
+
+@dataclass
+class AlertListResult(ServiceResult):
+    """Result for listing alerts."""
+    alerts: list = field(default_factory=list)
