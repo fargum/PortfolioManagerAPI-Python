@@ -99,7 +99,7 @@ Use `model_dump(by_alias=True)` in JSONResponse.
 
 ## Code quality — run before reporting done
 ```bash
-.venv/Scripts/python.exe -m black src/
-.venv/Scripts/python.exe -m ruff check src/
-.venv/Scripts/python.exe -m mypy src/
+uv run black src/
+uv run ruff check src/
+uv run mypy src/
 ```

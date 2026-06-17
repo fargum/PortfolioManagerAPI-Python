@@ -34,17 +34,16 @@ PortfolioManagerPythonAPI/
 │   ├── schemas/           # Pydantic schemas (DTOs)
 │   └── services/          # Business logic
 ├── tests/                 # Unit and integration tests
-├── requirements.txt       # Production dependencies
-├── requirements-dev.txt   # Development dependencies
-├── .env.example          # Environment variables template
-└── pyproject.toml        # Project configuration
+├── pyproject.toml        # Project config and dependencies
+├── uv.lock               # Pinned dependency lockfile
+└── .env.example          # Environment variables template
 ```
 
 ## Prerequisites
 
 - Python 3.11 or higher
 - PostgreSQL database (existing Portfolio Manager database)
-- pip or uv for package management
+- [uv](https://docs.astral.sh/uv/) for package management
 
 ## Setup
 
@@ -54,22 +53,17 @@ PortfolioManagerPythonAPI/
 cd c:\Users\neilb\projects\PorfolioManagerPythonAPI
 ```
 
-### 2. Create Virtual Environment
+### 2. Install Dependencies
+
+uv creates the virtual environment and installs everything automatically:
 
 ```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+uv sync --extra dev
 ```
 
-### 3. Install Dependencies
-
+To install production dependencies only (e.g. in CI):
 ```powershell
-pip install -r requirements.txt
-```
-
-For development:
-```powershell
-pip install -r requirements-dev.txt
+uv sync
 ```
 
 ### 4. Configure Environment
@@ -402,29 +396,43 @@ The API expects a `holdings` table with the following structure (adjust to match
 
 Format code with Black:
 ```powershell
-black src/
+uv run black src/
 ```
 
 Lint with Ruff:
 ```powershell
-ruff check src/
+uv run ruff check src/
 ```
 
 Type checking with mypy:
 ```powershell
-mypy src/
+uv run mypy src/
 ```
 
 ### Testing
 
 Run tests (when implemented):
 ```powershell
-pytest
+uv run pytest
 ```
 
 With coverage:
 ```powershell
-pytest --cov=src tests/
+uv run pytest --cov=src tests/
+```
+
+### One-Command Developer Check
+
+Run dependency sync, lint, type-checking, and tests in one command:
+
+```powershell
+.\scripts\uv-dev.ps1
+```
+
+Skip tests if needed:
+
+```powershell
+.\scripts\uv-dev.ps1 -NoTests
 ```
 
 ## Next Steps

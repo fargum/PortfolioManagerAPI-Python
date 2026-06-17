@@ -53,11 +53,11 @@ You are a debugging specialist for the Portfolio Manager Python API. Your job is
 
 ## Diagnostic commands
 ```bash
-.venv/Scripts/python.exe -m pytest tests/ -v -s
-.venv/Scripts/python.exe -m pytest tests/path/to/test.py::TestClass::test_name -v -s
-.venv/Scripts/python.exe -c "from src.api.main import app"
-.venv/Scripts/python.exe -m mypy src/ --show-error-codes
-.venv/Scripts/python.exe -c "from src.core.config import settings; print(settings.database_url)"
+uv run pytest tests/ -v -s
+uv run pytest tests/path/to/test.py::TestClass::test_name -v -s
+uv run python -c "from src.api.main import app"
+uv run mypy src/ --show-error-codes
+uv run python -c "from src.core.config import settings; print(settings.database_url)"
 ```
 
 ## Output format

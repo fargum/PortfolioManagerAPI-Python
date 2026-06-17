@@ -60,19 +60,19 @@ You are a debugging specialist for the Portfolio Manager Python API. Your job is
 ## Useful diagnostic commands
 ```bash
 # Run with verbose output
-.venv/Scripts/python.exe -m pytest tests/ -v -s
+uv run pytest tests/ -v -s
 
 # Run a specific failing test
-.venv/Scripts/python.exe -m pytest tests/path/to/test.py::TestClass::test_name -v -s
+uv run pytest tests/path/to/test.py::TestClass::test_name -v -s
 
 # Check for import errors
-.venv/Scripts/python.exe -c "from src.api.main import app"
+uv run python -c "from src.api.main import app"
 
 # Type check for async/await issues
-.venv/Scripts/python.exe -m mypy src/ --show-error-codes
+uv run mypy src/ --show-error-codes
 
 # Check environment variables are loaded
-.venv/Scripts/python.exe -c "from src.core.config import settings; print(settings.database_url)"
+uv run python -c "from src.core.config import settings; print(settings.database_url)"
 ```
 
 ## Output format

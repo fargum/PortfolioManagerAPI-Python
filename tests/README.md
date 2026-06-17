@@ -21,35 +21,35 @@ tests/
 
 ### Run All Tests
 ```bash
-pytest
+uv run pytest
 ```
 
 ### Run Specific Test Categories
 ```bash
 # Unit tests only
-pytest -m unit
+uv run pytest -m unit
 
 # Integration tests only
-pytest -m integration
+uv run pytest -m integration
 
 # API tests only
-pytest -m api
+uv run pytest -m api
 ```
 
 ### Run Tests with Coverage
 ```bash
-pytest --cov=src --cov-report=html
+uv run pytest --cov=src --cov-report=html
 # View coverage report: htmlcov/index.html
 ```
 
 ### Run Specific Test File
 ```bash
-pytest tests/unit/test_services/test_holding_service.py
+uv run pytest tests/unit/test_services/test_holding_service.py
 ```
 
 ### Run Tests in Verbose Mode
 ```bash
-pytest -v
+uv run pytest -v
 ```
 
 ## Test Fixtures
@@ -133,7 +133,7 @@ Use markers to categorize tests:
 
 ## Dependencies
 
-All test dependencies are in `requirements-dev.txt`:
+All test dependencies are in the `dev` optional group in `pyproject.toml` (install with `uv sync --extra dev`):
 
 - `pytest` - Testing framework
 - `pytest-asyncio` - Async test support
@@ -161,7 +161,7 @@ Tests are configured to run in CI/CD pipelines. The `pytest.ini` file contains a
 ```yaml
 - name: Run tests
   run: |
-    pytest --cov=src --cov-report=xml
+    uv run pytest --cov=src --cov-report=xml
     
 - name: Upload coverage
   uses: codecov/codecov-action@v3
@@ -184,7 +184,7 @@ Make sure to:
 ### Coverage Not Working
 Run with coverage explicitly:
 ```bash
-pytest --cov=src --cov-report=term-missing
+uv run pytest --cov=src --cov-report=term-missing
 ```
 
 ## Next Steps

@@ -111,6 +111,6 @@ class Test<Name>:
 Use `mock_db_session` from `tests/conftest.py`. Mark all tests `@pytest.mark.unit`.
 
 ### Step 7 — Verify
-Run: `.venv/Scripts/python.exe -m pytest tests/unit/ -v`
+Run: `uv run pytest tests/unit/ -v`
 
 All tests should pass. Fix any import errors or logic issues before finishing.

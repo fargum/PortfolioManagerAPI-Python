@@ -65,5 +65,12 @@ Use `model_dump(by_alias=True)` in JSONResponse.
 - Remove imports/variables made unused by your changes
 - Async throughout — all services, routes, and tools use `async/await`
 
+## Dependency management
+- Dependencies are declared in `pyproject.toml` and pinned in `uv.lock`. There are no `requirements*.txt` files.
+- Install production deps: `uv sync`
+- Install with dev tools: `uv sync --extra dev`
+- After adding or changing a dependency in `pyproject.toml`, run `uv lock` to update the lockfile.
+- Run all tools via uv: `uv run pytest`, `uv run black src/`, `uv run ruff check src/`, `uv run mypy src/`
+
 ## Specialist agents available
 Use `@` to invoke: `@portfolio-coder`, `@portfolio-planner`, `@portfolio-qa`, `@portfolio-reviewer`, `@portfolio-debugger`, `@portfolio-db`, `@portfolio-prompt-engineer`, `@langgraph-agent-specialist`

@@ -69,6 +69,6 @@ class Test<Name>ToolExecution:
 Mark tests `@pytest.mark.unit`. Use `Mock(spec=ServiceClass)` and `AsyncMock` for async methods.
 
 ### Step 6 — Verify
-Run: `.venv/Scripts/python.exe -m pytest tests/unit/test_services/test_ai/ -v`
+Run: `uv run pytest tests/unit/test_services/test_ai/ -v`
 
 All tests should pass. Fix any import errors or logic issues before finishing.

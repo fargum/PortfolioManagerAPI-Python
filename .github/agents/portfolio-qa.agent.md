@@ -83,11 +83,11 @@ class TestMyToolExecution:
 
 ## Running tests
 ```bash
-.venv/Scripts/python.exe -m pytest                                               # all
-.venv/Scripts/python.exe -m pytest -m unit                                       # unit only
-.venv/Scripts/python.exe -m pytest -m integration                                # integration only
-.venv/Scripts/python.exe -m pytest tests/unit/test_services/test_ai/ -v         # AI tools
-.venv/Scripts/python.exe -m pytest --cov=src tests/ --cov-report=term-missing   # with coverage
+uv run pytest                                               # all
+uv run pytest -m unit                                       # unit only
+uv run pytest -m integration                                # integration only
+uv run pytest tests/unit/test_services/test_ai/ -v         # AI tools
+uv run pytest --cov=src tests/ --cov-report=term-missing   # with coverage
 ```
 
 ## Database tests

@@ -130,8 +130,8 @@ await session.execute(update(Holding).where(Holding.portfolio_id == pid).values(
 ## Diagnostic commands
 ```bash
 # Check model imports resolve correctly
-.venv/Scripts/python.exe -c "from src.db.models import *; print('OK')"
+uv run python -c "from src.db.models import *; print('OK')"
 
 # Type check the models
-.venv/Scripts/python.exe -m mypy src/db/ --show-error-codes
+uv run mypy src/db/ --show-error-codes
 ```

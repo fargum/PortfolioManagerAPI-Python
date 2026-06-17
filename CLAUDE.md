@@ -26,25 +26,25 @@ For bug fixes: write a test reproducing it, then make it pass.
 
 ```bash
 # Install dependencies
-pip install -r requirements.txt
-pip install -r requirements-dev.txt  # for development
+uv sync              # prod deps only (creates .venv automatically)
+uv sync --extra dev  # prod + dev tools
 
 # Run the API server
 python -m src.api.main
 uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000  # with hot reload
 
 # Code quality
-black src/                    # format code
-ruff check src/               # lint
-mypy src/                     # type check
+uv run black src/             # format code
+uv run ruff check src/        # lint
+uv run mypy src/              # type check
 
 # Testing
-pytest                        # run all tests
-pytest -m unit                # unit tests only
-pytest -m integration         # integration tests only
-pytest -m api                 # API tests only
-pytest tests/unit/test_services/test_holding_service.py  # single file
-pytest --cov=src tests/       # with coverage
+uv run pytest                        # run all tests
+uv run pytest -m unit                # unit tests only
+uv run pytest -m integration         # integration tests only
+uv run pytest -m api                 # API tests only
+uv run pytest tests/unit/test_services/test_holding_service.py  # single file
+uv run pytest --cov=src tests/       # with coverage
 ```
 
 ## Architecture Overview
