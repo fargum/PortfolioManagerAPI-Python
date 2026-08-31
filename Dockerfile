@@ -27,6 +27,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
+COPY --from=uv /uv /usr/local/bin/uv
+
 # Copy virtual environment from builder
 COPY --from=builder /app/.venv /app/.venv
 
