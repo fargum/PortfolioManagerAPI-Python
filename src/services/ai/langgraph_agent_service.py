@@ -207,7 +207,7 @@ class LangGraphAgentService:
 
                 # Track prompt size (approximate token count based on chars/4)
                 total_chars = sum(
-                    len(m.content) if hasattr(m, 'content') else len(str(m.get('content', '')))
+                    len(str(m.get('content', ''))) if isinstance(m, dict) else len(m.content)
                     for m in messages
                 )
                 span.set_attribute("llm.prompt_chars", total_chars)
@@ -583,7 +583,7 @@ class LangGraphAgentService:
             }
         }
 
-        return workflow, initial_state, config, thread.id
+        return workflow, initial_state, config, int(thread.id)
 
     async def stream_chat(
         self,

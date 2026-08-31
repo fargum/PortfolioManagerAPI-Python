@@ -5,7 +5,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.db.models.watch import AlertSeverity, WatchCadence, WatchRunStatus, WatchScopeType, WatchType
+from src.db.models.watch import (
+    AlertSeverity,
+    WatchCadence,
+    WatchRunStatus,
+    WatchScopeType,
+    WatchType,
+)
 
 
 class CreateWatchRequest(BaseModel):

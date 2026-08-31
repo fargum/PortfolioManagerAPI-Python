@@ -22,6 +22,7 @@ if sys.platform == "win32" and hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')  # type: ignore[union-attr]
 
 from src.core.ai_config import AIConfig
+from src.core.config import settings
 from src.db.session import get_db
 from src.services.ai.agent_prompt_service import AgentPromptService
 from src.services.ai.langgraph_agent_service import LangGraphAgentService
@@ -45,7 +46,8 @@ async def test_basic_tool_call():
     prompt_service = AgentPromptService()
     agent_service = LangGraphAgentService(
         ai_config=ai_config,
-        agent_prompt_service=prompt_service
+        agent_prompt_service=prompt_service,
+        settings=settings
     )
 
     # Get database session
@@ -88,7 +90,8 @@ async def test_portfolio_analysis():
     prompt_service = AgentPromptService()
     agent_service = LangGraphAgentService(
         ai_config=ai_config,
-        agent_prompt_service=prompt_service
+        agent_prompt_service=prompt_service,
+        settings=settings
     )
 
     # Get database session
@@ -131,7 +134,8 @@ async def test_portfolio_comparison():
     prompt_service = AgentPromptService()
     agent_service = LangGraphAgentService(
         ai_config=ai_config,
-        agent_prompt_service=prompt_service
+        agent_prompt_service=prompt_service,
+        settings=settings
     )
 
     # Get database session
@@ -174,7 +178,8 @@ async def test_multi_turn_conversation():
     prompt_service = AgentPromptService()
     agent_service = LangGraphAgentService(
         ai_config=ai_config,
-        agent_prompt_service=prompt_service
+        agent_prompt_service=prompt_service,
+        settings=settings
     )
 
     # Get database session
@@ -196,26 +201,19 @@ async def test_multi_turn_conversation():
             print(token, end='', flush=True)
             response1_tokens.append(token)
 
-        response1 = ''.join(response1_tokens)
         print("\n")
 
-        # Second turn with context
+        # Second turn - conversation memory persists server-side via the
+        # thread's AsyncPostgresSaver checkpointer, so no history is passed here
         query2 = "Which holdings are performing best?"
         print(f"\nUser: {query2}")
         print("\nAgent Response:\n")
-
-        # Build conversation history
-        conversation_history = [
-            {"role": "user", "content": query1},
-            {"role": "assistant", "content": response1}
-        ]
 
         response2_tokens = []
         async for token in agent_service.stream_chat(
             user_message=query2,
             account_id=account_id,
-            db=db,
-            conversation_history=conversation_history
+            db=db
         ):
             print(token, end='', flush=True)
             response2_tokens.append(token)
