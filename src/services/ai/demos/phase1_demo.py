@@ -112,7 +112,7 @@ def main():
     print()
     print("Next Steps:")
     print("1. Update .env with your Azure Foundry credentials")
-    print("2. Run: pip install -r requirements.txt")
+    print("2. Run: uv pip install -r requirements.txt (or pip install -r requirements.txt)")
     print("3. Proceed to Phase 2: Basic Chat Service")
     print()
 

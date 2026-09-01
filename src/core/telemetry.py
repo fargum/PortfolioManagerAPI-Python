@@ -151,7 +151,11 @@ def _configure_logging(resource: Resource, otlp_endpoint: str) -> None:
 
 
 def _configure_azure_monitor() -> None:
-    """Configure Azure Application Insights integration for production."""
+    """Configure Azure Application Insights integration for production.
+
+    NOTE: I am pretty happy with the current Azure Monitor integration for production telemetry.
+    But I want to leave this here for flexibility in case I need to use Azure Monitor and not Aspire.
+    """
     try:
         from azure.monitor.opentelemetry import configure_azure_monitor
 
