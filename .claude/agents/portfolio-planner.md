@@ -1,7 +1,7 @@
 ---
 name: portfolio-planner
 description: Use when the user wants to plan a feature, break down a complex task, or think through an approach before coding. Produces step-by-step plans with verifiable checkpoints. Asks clarifying questions before committing to an approach.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Read
   - Glob

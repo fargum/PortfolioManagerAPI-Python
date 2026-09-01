@@ -1,7 +1,7 @@
 ---
 name: portfolio-reviewer
 description: Use for code review — checking security, correctness, and adherence to project patterns before merging. Read-only: identifies issues but does not make changes. Checks account_id injection security, service result handling, and CLAUDE.md compliance.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Read
   - Glob

@@ -1,7 +1,7 @@
 ---
 name: portfolio-orchestrator
 description: Use for complex, multi-step tasks that span planning, implementation, testing, and review. Coordinates the other Portfolio Manager agents. Invoke when a task is too large or multi-faceted for a single focused agent.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Agent
   - Read

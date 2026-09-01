@@ -1,7 +1,7 @@
 ---
 name: portfolio-qa
 description: Use for writing tests, running the test suite, checking coverage, or debugging test failures in the Portfolio Manager. Knows all pytest patterns, AsyncMock conventions, and test fixture locations.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Read
   - Edit

@@ -1,7 +1,7 @@
 ---
 name: portfolio-db
 description: Use for SQLAlchemy model changes, database schema work, query optimisation, or relationship loading issues in the Portfolio Manager. Knows the app schema structure, async session patterns, and all existing models.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Read
   - Edit

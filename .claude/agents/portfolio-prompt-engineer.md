@@ -1,7 +1,7 @@
 ---
 name: portfolio-prompt-engineer
 description: Use when iterating on the AI agent's system prompts — the portfolio advisor tone, tool usage guidance, voice mode instructions, or communication style. Works with agent_prompts.json and agent_prompt_service.py.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Read
   - Edit

@@ -1,7 +1,7 @@
 ---
 name: portfolio-debugger
 description: Use when diagnosing runtime errors, async failures, LangGraph streaming issues, database query problems, or any unexpected behaviour in the Portfolio Manager. Knows the common failure modes for this stack.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Read
   - Glob

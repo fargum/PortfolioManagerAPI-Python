@@ -1,7 +1,7 @@
 ---
 name: langgraph-agent-specialist
 description: Specialist for the LangGraph AI agent layer of the Portfolio Manager. Use when modifying langgraph_agent_service.py, adding or debugging AI tools, working with conversation memory/checkpointing, debugging streaming, or understanding the voice vs UI chat modes. Has deep knowledge of the tool factory pattern, AsyncPostgresSaver lifecycle, astream_events v2 handling, and OTel span management.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Read
   - Grep
