@@ -1,6 +1,7 @@
 ---
 name: portfolio-db
 description: Use for SQLAlchemy model changes, database schema work, query optimisation, or relationship loading issues in the Portfolio Manager. Knows the app schema structure, async session patterns, and all existing models.
+model: GPT-5.6 Luna
 tools: ['read', 'search/codebase', 'edit', 'bash']
 ---
 

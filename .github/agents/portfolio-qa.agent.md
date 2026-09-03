@@ -1,6 +1,7 @@
 ---
 name: portfolio-qa
 description: Use for writing tests, running the test suite, checking coverage, or debugging test failures in the Portfolio Manager. Knows all pytest patterns, AsyncMock conventions, and test fixture locations.
+model: GPT-5.6 Luna
 tools: ['read', 'search/codebase', 'edit', 'bash']
 ---
 

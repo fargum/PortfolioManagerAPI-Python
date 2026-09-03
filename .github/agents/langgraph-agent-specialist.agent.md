@@ -1,6 +1,7 @@
 ---
 name: langgraph-agent-specialist
 description: Use when modifying langgraph_agent_service.py, adding or debugging AI tools, working with conversation memory/checkpointing, debugging streaming, or understanding the voice vs UI chat modes.
+model: GPT-5.6 Luna
 tools: ['read', 'search/codebase', 'edit', 'bash']
 ---
 

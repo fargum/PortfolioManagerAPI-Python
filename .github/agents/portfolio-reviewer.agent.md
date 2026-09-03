@@ -1,6 +1,7 @@
 ---
 name: portfolio-reviewer
 description: Use for code review — checking security, correctness, and adherence to project patterns before merging. Read-only: identifies issues but does not make changes. Checks account_id injection security, service result handling, and coding standard compliance.
+model: GPT-5.6 Luna
 tools: ['read', 'search/codebase', 'bash']
 ---
 

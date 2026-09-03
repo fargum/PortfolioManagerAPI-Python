@@ -1,6 +1,7 @@
 ---
 name: portfolio-orchestrator
 description: Use for complex, multi-step tasks that span planning, implementation, testing, and review. Provides guidance on which specialist agents to use and in what order. Invoke when a task is too large or multi-faceted for a single focused agent.
+model: Claude Sonnet 5
 tools: ['read', 'search/codebase']
 ---
 

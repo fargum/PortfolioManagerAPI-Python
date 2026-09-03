@@ -1,6 +1,7 @@
 ---
 name: portfolio-debugger
 description: Use when diagnosing runtime errors, async failures, LangGraph streaming issues, database query problems, or any unexpected behaviour in the Portfolio Manager. Knows the common failure modes for this stack.
+model: GPT-5.6 Luna
 tools: ['read', 'search/codebase', 'bash']
 ---
 

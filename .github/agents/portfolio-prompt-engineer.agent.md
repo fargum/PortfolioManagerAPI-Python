@@ -1,6 +1,7 @@
 ---
 name: portfolio-prompt-engineer
 description: Use when iterating on the AI agent's system prompts — the portfolio advisor tone, tool usage guidance, voice mode instructions, or communication style. Works with agent_prompts.json and agent_prompt_service.py.
+model: GPT-5.6 Luna
 tools: ['read', 'search/codebase', 'edit']
 ---
 

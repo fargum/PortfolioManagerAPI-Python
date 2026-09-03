@@ -1,6 +1,7 @@
 ---
 name: portfolio-coder
 description: Use when implementing a specific, well-defined coding task in the Portfolio Manager. Follows the established FastAPI/LangGraph patterns precisely. Best used after portfolio-planner has produced a plan, or for small focused changes.
+model: GPT-5.6 Luna
 tools: ['read', 'search/codebase', 'edit', 'bash']
 ---
 
