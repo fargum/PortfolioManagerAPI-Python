@@ -51,6 +51,7 @@ class TestGetHoldingsByAccountAndDate:
         # Mock empty portfolio result
         mock_result = MagicMock()
         mock_result.all.return_value = []
+        mock_result.scalars.return_value.all.return_value = []
         mock_db_session.execute.return_value = mock_result
         
         result = await holding_service.get_holdings_by_account_and_date_async(
@@ -68,6 +69,7 @@ class TestGetHoldingsByAccountAndDate:
         # Mock portfolio result with IDs
         mock_portfolio_result = MagicMock()
         mock_portfolio_result.all.return_value = [(1,), (2,)]
+        mock_portfolio_result.scalars.return_value.all.return_value = [1, 2]
         
         # Mock empty holdings result
         mock_holdings_result = MagicMock()
@@ -100,6 +102,7 @@ class TestGetHoldingsByAccountAndDate:
         # Mock portfolio result
         mock_portfolio_result = MagicMock()
         mock_portfolio_result.all.return_value = [(1,)]
+        mock_portfolio_result.scalars.return_value.all.return_value = [1]
         
         # Mock holdings result with row data
         mock_holdings_result = MagicMock()
@@ -112,7 +115,8 @@ class TestGetHoldingsByAccountAndDate:
                 sample_instrument.currency_code,
                 sample_instrument.quote_unit,
                 sample_portfolio.name,
-                sample_portfolio.id
+                sample_portfolio.id,
+                "Test Platform"
             )
         ]
         
@@ -129,7 +133,7 @@ class TestGetHoldingsByAccountAndDate:
         assert result.total_holdings == 1
         assert result.holdings[0].ticker == "AAPL"
         assert result.holdings[0].current_value == Decimal("1500.00")
-        assert result.holdings[0].units == Decimal("10.0")
+        assert result.holdings[0].unit_amount == Decimal("10.0")
 
 
 class TestBuildHoldingsResponse:
@@ -153,7 +157,8 @@ class TestBuildHoldingsResponse:
                 sample_instrument.currency_code,
                 sample_instrument.quote_unit,
                 sample_portfolio.name,
-                sample_portfolio.id
+                sample_portfolio.id,
+                "Test Platform"
             )
         ]
         
@@ -162,7 +167,7 @@ class TestBuildHoldingsResponse:
         assert len(result) == 1
         assert result[0]['ticker'] == "AAPL"
         assert result[0]['instrument_name'] == "Apple Inc."
-        assert result[0]['units'] == Decimal("10.0")
+        assert result[0]['unit_amount'] == Decimal("10.0")
         assert result[0]['current_value'] == Decimal("1500.00")
         assert result[0]['bought_value'] == Decimal("1000.00")
         assert result[0]['gain_loss'] == Decimal("500.00")
@@ -189,7 +194,8 @@ class TestBuildHoldingsResponse:
                 sample_instrument.currency_code,
                 sample_instrument.quote_unit,
                 sample_portfolio.name,
-                sample_portfolio.id
+                sample_portfolio.id,
+                "Test Platform"
             )
         ]
         
@@ -219,7 +225,8 @@ class TestBuildHoldingsResponse:
                 sample_instrument.currency_code,
                 sample_instrument.quote_unit,
                 sample_portfolio.name,
-                sample_portfolio.id
+                sample_portfolio.id,
+                "Test Platform"
             )
         ]
         
@@ -250,7 +257,8 @@ class TestApplyRealTimePricing:
                 sample_instrument.currency_code,
                 sample_instrument.quote_unit,
                 sample_portfolio.name,
-                sample_portfolio.id
+                sample_portfolio.id,
+                "Test Platform"
             )
         ]
         
@@ -283,7 +291,8 @@ class TestApplyRealTimePricing:
                 "GBP",
                 "GBP",
                 sample_portfolio.name,
-                sample_portfolio.id
+                sample_portfolio.id,
+                "Test Platform"
             )
         ]
         
@@ -324,7 +333,8 @@ class TestApplyRealTimePricing:
                 sample_instrument.currency_code,
                 sample_instrument.quote_unit,
                 sample_portfolio.name,
-                sample_portfolio.id
+                sample_portfolio.id,
+                "Test Platform"
             )
         ]
         
@@ -370,7 +380,8 @@ class TestApplyRealTimePricing:
                 sample_instrument.currency_code,
                 sample_instrument.quote_unit,
                 sample_portfolio.name,
-                sample_portfolio.id
+                sample_portfolio.id,
+                "Test Platform"
             )
         ]
         
@@ -405,7 +416,8 @@ class TestApplyRealTimePricing:
                 sample_instrument.currency_code,
                 sample_instrument.quote_unit,
                 sample_portfolio.name,
-                sample_portfolio.id
+                sample_portfolio.id,
+                "Test Platform"
             )
         ]
         
