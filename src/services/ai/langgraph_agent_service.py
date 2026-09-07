@@ -192,17 +192,19 @@ class LangGraphAgentService:
                 span.set_attribute("llm.provider", "azure_openai")
 
                 messages = state["messages"]
-                # Inject system prompt on first message
+                # System prompt is an instruction boundary, not conversational memory —
+                # prepend it on every invocation rather than only the first turn, since
+                # the checkpointer persists only what this node returns (the AI response),
+                # never the system message itself.
                 is_first_message = not any(isinstance(m, (AIMessage, ToolMessage)) for m in messages)
-                if is_first_message:
-                    messages = [{"role": "system", "content": system_prompt}] + messages
+                messages = [{"role": "system", "content": system_prompt}] + messages
 
                 # Trace the context being sent to LLM
                 span.set_attribute("llm.is_first_message", is_first_message)
                 span.set_attribute("llm.message_count", len(messages))
 
                 # Log detailed context for tracing
-                context_summary = self._summarize_messages_for_trace(messages, system_prompt if is_first_message else None)
+                context_summary = self._summarize_messages_for_trace(messages, system_prompt)
                 span.set_attribute("llm.context_summary", context_summary)
 
                 # Track prompt size (approximate token count based on chars/4)
