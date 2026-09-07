@@ -184,7 +184,7 @@ class LangGraphAgentService:
         model_name = model_name or self.ai_config.azure_openai_deployment_name
         metrics = get_metrics_service()
 
-        def call_model(state: AgentState) -> AgentState:
+        async def call_model(state: AgentState) -> AgentState:
             tracer = get_tracer()
 
             with tracer.start_as_current_span("LLMInvocation") as span:
@@ -218,7 +218,7 @@ class LangGraphAgentService:
                 start_time = time.perf_counter()
 
                 try:
-                    response = model_with_tools.invoke(messages)
+                    response = await model_with_tools.ainvoke(messages)
                     duration = time.perf_counter() - start_time
 
                     # Extract token usage from response metadata
