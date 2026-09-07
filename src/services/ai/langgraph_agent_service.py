@@ -439,69 +439,103 @@ class LangGraphAgentService:
             graph_span.set_attribute("agent.thread_id", config.get("configurable", {}).get("thread_id", ""))
             graph_span.set_attribute("agent.account_id", initial_state.get("account_id", 0))
 
-            async for event in graph.astream_events(
-                initial_state,
-                config=config,
-                version="v2"
-            ):
-                # Handle events using pattern matching
-                match event["event"]:
-                    case "on_chat_model_stream":
-                        # Stream token events from the model
-                        chunk = event["data"]["chunk"]
-                        if hasattr(chunk, "content") and chunk.content:
-                            total_tokens_streamed += 1
-                            yield chunk.content
+            try:
+                async for event in graph.astream_events(
+                    initial_state,
+                    config=config,
+                    version="v2"
+                ):
+                    # Handle events using pattern matching
+                    match event["event"]:
+                        case "on_chat_model_stream":
+                            # Stream token events from the model
+                            chunk = event["data"]["chunk"]
+                            if hasattr(chunk, "content") and chunk.content:
+                                total_tokens_streamed += 1
+                                yield chunk.content
 
-                    case "on_tool_start":
-                        # Stream status updates when tools are called
-                        tool_name = event.get("name", "")
-                        run_id = event.get("run_id", "")
-                        tool_input = event.get("data", {}).get("input", {})
+                        case "on_tool_start":
+                            # Stream status updates when tools are called
+                            tool_name = event.get("name", "")
+                            run_id = event.get("run_id", "")
+                            tool_input = event.get("data", {}).get("input", {})
 
-                        # Start a span for this tool execution. Keyed by run_id (unique
-                        # per invocation) rather than tool_name, since the model can issue
-                        # multiple parallel calls to the same tool (e.g. search_recent_news
-                        # for MSFT and NVDA at once), which would otherwise collide.
-                        tool_span = tracer.start_span(f"ToolExecution:{tool_name}")
-                        tool_span.set_attribute("tool.name", tool_name)
-                        tool_span.set_attribute("tool.input", json.dumps(tool_input) if tool_input else "{}")
-                        active_tool_spans[run_id] = tool_span
-                        tool_start_times[run_id] = time.perf_counter()
+                            # Start a span for this tool execution. Keyed by run_id (unique
+                            # per invocation) rather than tool_name, since the model can issue
+                            # multiple parallel calls to the same tool (e.g. search_recent_news
+                            # for MSFT and NVDA at once), which would otherwise collide.
+                            tool_span = tracer.start_span(f"ToolExecution:{tool_name}")
+                            tool_span.set_attribute("tool.name", tool_name)
+                            tool_span.set_attribute("tool.input", json.dumps(tool_input) if tool_input else "{}")
+                            active_tool_spans[run_id] = tool_span
+                            tool_start_times[run_id] = time.perf_counter()
 
-                        logger.info(f"🔧 Tool called: {tool_name} with input: {tool_input}")
+                            logger.info(f"🔧 Tool called: {tool_name} with input: {tool_input}")
 
-                        # Send user-friendly status message
-                        if tool_name in tool_status_messages:
-                            yield tool_status_messages[tool_name]
+                            # Send user-friendly status message
+                            if tool_name in tool_status_messages:
+                                yield tool_status_messages[tool_name]
 
-                    case "on_tool_end":
-                        tool_name = event.get("name", "")
-                        run_id = event.get("run_id", "")
-                        tool_output = event.get("data", {}).get("output", {})
+                        case "on_tool_end":
+                            tool_name = event.get("name", "")
+                            run_id = event.get("run_id", "")
+                            tool_output = event.get("data", {}).get("output", {})
 
-                        # End the tool span
-                        if run_id in active_tool_spans:
-                            tool_span = active_tool_spans.pop(run_id)
-                            duration = time.perf_counter() - tool_start_times.pop(run_id, time.perf_counter())
+                            # End the tool span
+                            if run_id in active_tool_spans:
+                                tool_span = active_tool_spans.pop(run_id)
+                                duration = time.perf_counter() - tool_start_times.pop(run_id, time.perf_counter())
 
-                            # Summarize output for tracing (avoid huge payloads)
-                            output_str = str(tool_output)
-                            output_preview = output_str[:1000] + "..." if len(output_str) > 1000 else output_str
-                            tool_span.set_attribute("tool.output_preview", output_preview)
-                            tool_span.set_attribute("tool.output_length", len(output_str))
-                            tool_span.set_attribute("tool.duration_ms", int(duration * 1000))
-                            tool_span.end()
+                                # Summarize output for tracing (avoid huge payloads)
+                                output_str = str(tool_output)
+                                output_preview = output_str[:1000] + "..." if len(output_str) > 1000 else output_str
+                                tool_span.set_attribute("tool.output_preview", output_preview)
+                                tool_span.set_attribute("tool.output_length", len(output_str))
+                                tool_span.set_attribute("tool.duration_ms", int(duration * 1000))
+                                tool_span.end()
 
-                            # Record tool metrics
-                            metrics.increment_tool_executions(tool_name, "success")
-                            metrics.record_tool_execution_duration(duration, tool_name, "success")
+                                # Record tool metrics
+                                metrics.increment_tool_executions(tool_name, "success")
+                                metrics.record_tool_execution_duration(duration, tool_name, "success")
 
-                        logger.info(f"Tool completed: {tool_name}")
+                            logger.info(f"Tool completed: {tool_name}")
 
-                        # Send completion message
-                        if tool_name in tool_completion_messages:
-                            yield tool_completion_messages[tool_name]
+                            # Send completion message
+                            if tool_name in tool_completion_messages:
+                                yield tool_completion_messages[tool_name]
+
+                        case "on_tool_error":
+                            tool_name = event.get("name", "")
+                            run_id = event.get("run_id", "")
+                            error = event.get("data", {}).get("error")
+
+                            # End the tool span as a failure
+                            if run_id in active_tool_spans:
+                                tool_span = active_tool_spans.pop(run_id)
+                                duration = time.perf_counter() - tool_start_times.pop(run_id, time.perf_counter())
+
+                                tool_span.set_attribute("error", True)
+                                tool_span.set_attribute("error.message", str(error))
+                                tool_span.set_attribute("tool.duration_ms", int(duration * 1000))
+                                if isinstance(error, BaseException):
+                                    tool_span.record_exception(error)
+                                tool_span.end()
+
+                                # Record tool failure metrics
+                                metrics.increment_tool_executions(tool_name, "error")
+                                metrics.record_tool_execution_duration(duration, tool_name, "error")
+
+                            logger.error(f"Tool failed: {tool_name}: {error}")
+            finally:
+                # Safety net: end any spans left open because the stream ended
+                # (client disconnect, cancellation, upstream error) without a
+                # matching on_tool_end/on_tool_error for that invocation.
+                for leftover_span in active_tool_spans.values():
+                    leftover_span.set_attribute("error", True)
+                    leftover_span.set_attribute("error.message", "Stream ended before tool completion")
+                    leftover_span.end()
+                active_tool_spans.clear()
+                tool_start_times.clear()
 
             graph_span.set_attribute("agent.total_stream_chunks", total_tokens_streamed)
 
@@ -685,70 +719,109 @@ class LangGraphAgentService:
             graph_span.set_attribute("agent.thread_id", config.get("configurable", {}).get("thread_id", ""))
             graph_span.set_attribute("agent.account_id", initial_state.get("account_id", 0))
 
-            async for event in graph.astream_events(
-                initial_state,
-                config=config,
-                version="v2"
-            ):
-                match event["event"]:
-                    case "on_chat_model_stream":
-                        chunk = event["data"]["chunk"]
-                        if hasattr(chunk, "content") and chunk.content:
-                            final_text_chunks.append(chunk.content)
+            try:
+                async for event in graph.astream_events(
+                    initial_state,
+                    config=config,
+                    version="v2"
+                ):
+                    match event["event"]:
+                        case "on_chat_model_stream":
+                            chunk = event["data"]["chunk"]
+                            if hasattr(chunk, "content") and chunk.content:
+                                final_text_chunks.append(chunk.content)
 
-                    case "on_tool_start":
-                        tool_name = event.get("name", "")
-                        run_id = event.get("run_id", "")
-                        tool_input = event.get("data", {}).get("input", {})
+                        case "on_tool_start":
+                            tool_name = event.get("name", "")
+                            run_id = event.get("run_id", "")
+                            tool_input = event.get("data", {}).get("input", {})
 
-                        # Start a span for this tool execution. Keyed by run_id (unique
-                        # per invocation) rather than tool_name, since the model can issue
-                        # multiple parallel calls to the same tool (e.g. search_recent_news
-                        # for MSFT and NVDA at once), which would otherwise collide.
-                        tool_span = tracer.start_span(f"ToolExecution:{tool_name}")
-                        tool_span.set_attribute("tool.name", tool_name)
-                        tool_span.set_attribute("tool.input", json.dumps(tool_input) if tool_input else "{}")
-                        active_tool_spans[run_id] = tool_span
-                        tool_start_times[run_id] = time.perf_counter()
+                            # Start a span for this tool execution. Keyed by run_id (unique
+                            # per invocation) rather than tool_name, since the model can issue
+                            # multiple parallel calls to the same tool (e.g. search_recent_news
+                            # for MSFT and NVDA at once), which would otherwise collide.
+                            tool_span = tracer.start_span(f"ToolExecution:{tool_name}")
+                            tool_span.set_attribute("tool.name", tool_name)
+                            tool_span.set_attribute("tool.input", json.dumps(tool_input) if tool_input else "{}")
+                            active_tool_spans[run_id] = tool_span
+                            tool_start_times[run_id] = time.perf_counter()
 
-                        logger.info(f"Tool started: {tool_name}")
-                        # Start tracking this tool call
-                        tool_events.append({
-                            "run_id": run_id,
-                            "name": tool_name,
-                            "input": tool_input,
-                            "output": None  # Will be filled on_tool_end
-                        })
+                            logger.info(f"Tool started: {tool_name}")
+                            # Start tracking this tool call
+                            tool_events.append({
+                                "run_id": run_id,
+                                "name": tool_name,
+                                "input": tool_input,
+                                "output": None  # Will be filled on_tool_end/on_tool_error
+                            })
 
-                    case "on_tool_end":
-                        tool_name = event.get("name", "")
-                        run_id = event.get("run_id", "")
-                        tool_output = event.get("data", {}).get("output", {})
+                        case "on_tool_end":
+                            tool_name = event.get("name", "")
+                            run_id = event.get("run_id", "")
+                            tool_output = event.get("data", {}).get("output", {})
 
-                        # End the tool span
-                        if run_id in active_tool_spans:
-                            tool_span = active_tool_spans.pop(run_id)
-                            duration = time.perf_counter() - tool_start_times.pop(run_id, time.perf_counter())
+                            # End the tool span
+                            if run_id in active_tool_spans:
+                                tool_span = active_tool_spans.pop(run_id)
+                                duration = time.perf_counter() - tool_start_times.pop(run_id, time.perf_counter())
 
-                            # Summarize output for tracing
-                            output_str = str(tool_output)
-                            output_preview = output_str[:1000] + "..." if len(output_str) > 1000 else output_str
-                            tool_span.set_attribute("tool.output_preview", output_preview)
-                            tool_span.set_attribute("tool.output_length", len(output_str))
-                            tool_span.set_attribute("tool.duration_ms", int(duration * 1000))
-                            tool_span.end()
+                                # Summarize output for tracing
+                                output_str = str(tool_output)
+                                output_preview = output_str[:1000] + "..." if len(output_str) > 1000 else output_str
+                                tool_span.set_attribute("tool.output_preview", output_preview)
+                                tool_span.set_attribute("tool.output_length", len(output_str))
+                                tool_span.set_attribute("tool.duration_ms", int(duration * 1000))
+                                tool_span.end()
 
-                            # Record tool metrics
-                            metrics.increment_tool_executions(tool_name, "success")
-                            metrics.record_tool_execution_duration(duration, tool_name, "success")
+                                # Record tool metrics
+                                metrics.increment_tool_executions(tool_name, "success")
+                                metrics.record_tool_execution_duration(duration, tool_name, "success")
 
-                        logger.info(f"Tool completed: {tool_name}")
-                        # Find and update the matching tool event by run_id — unambiguous
-                        # even when multiple parallel calls share the same tool name.
-                        for te in tool_events:
-                            if te["run_id"] == run_id:
-                                te["output"] = tool_output
-                                break
+                            logger.info(f"Tool completed: {tool_name}")
+                            # Find and update the matching tool event by run_id — unambiguous
+                            # even when multiple parallel calls share the same tool name.
+                            for te in tool_events:
+                                if te["run_id"] == run_id:
+                                    te["output"] = tool_output
+                                    break
+
+                        case "on_tool_error":
+                            tool_name = event.get("name", "")
+                            run_id = event.get("run_id", "")
+                            error = event.get("data", {}).get("error")
+
+                            # End the tool span as a failure
+                            if run_id in active_tool_spans:
+                                tool_span = active_tool_spans.pop(run_id)
+                                duration = time.perf_counter() - tool_start_times.pop(run_id, time.perf_counter())
+
+                                tool_span.set_attribute("error", True)
+                                tool_span.set_attribute("error.message", str(error))
+                                tool_span.set_attribute("tool.duration_ms", int(duration * 1000))
+                                if isinstance(error, BaseException):
+                                    tool_span.record_exception(error)
+                                tool_span.end()
+
+                                # Record tool failure metrics
+                                metrics.increment_tool_executions(tool_name, "error")
+                                metrics.record_tool_execution_duration(duration, tool_name, "error")
+
+                            logger.error(f"Tool failed: {tool_name}: {error}")
+                            # Record the failure on the matching tool event
+                            for te in tool_events:
+                                if te["run_id"] == run_id:
+                                    te["output"] = {"Error": str(error)}
+                                    break
+            finally:
+                # Safety net: end any spans left open because the stream ended
+                # (client disconnect, cancellation, upstream error) without a
+                # matching on_tool_end/on_tool_error for that invocation.
+                for leftover_span in active_tool_spans.values():
+                    leftover_span.set_attribute("error", True)
+                    leftover_span.set_attribute("error.message", "Stream ended before tool completion")
+                    leftover_span.end()
+                active_tool_spans.clear()
+                tool_start_times.clear()
 
             # Record final response stats
             final_text = "".join(final_text_chunks)
