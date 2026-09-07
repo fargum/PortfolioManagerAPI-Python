@@ -1,5 +1,8 @@
 """
 Voice response adapter for transforming AI responses to voice-optimized format.
+I have deprecated this. I am not happy with its design or functionality.
+Text to voice and voice to text is still a difficult problem. The best models for this are still fairly expensive
+and there is too much latency for simpler solutions which detracts from the goal of natural, real-time voice interactions.
 """
 import logging
 import re

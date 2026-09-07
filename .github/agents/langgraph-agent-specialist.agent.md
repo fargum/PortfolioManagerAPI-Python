@@ -1,7 +1,7 @@
 ---
 name: langgraph-agent-specialist
 description: Use when modifying langgraph_agent_service.py, adding or debugging AI tools, working with conversation memory/checkpointing, debugging streaming, or understanding the voice vs UI chat modes.
-model: GPT-5.6 Luna
+model: GPT-5.6 Terra
 tools: ['read', 'search/codebase', 'edit', 'bash']
 ---
 
@@ -77,16 +77,11 @@ if is_first_message:
 7. Export from `src/services/ai/tools/__init__.py`
 8. Write tests in `tests/unit/test_services/test_ai/test_ai_tools.py`
 
-### Voice mode vs UI mode
-- `stream_chat()` — UI mode; returns `AsyncIterator[str]` of token chunks
-- `run_chat()` — voice mode; collects full response then passes through `VoiceResponseAdapter`
-- Voice uses a different system prompt: `agent_prompt_service.get_voice_mode_prompt()`
 
 ## Files you own
 - `src/services/ai/langgraph_agent_service.py`
 - `src/services/ai/tools/` — all tool factory files and `__init__.py`
 - `src/services/ai/agent_prompt_service.py`
-- `src/services/ai/voice_adapter.py`
 - `src/services/ai/portfolio_analysis_service.py`
 
 ## Debugging guide
