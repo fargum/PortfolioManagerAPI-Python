@@ -20,6 +20,10 @@ from src.core.ai_config import AIConfig
 from src.core.config import Settings
 from src.core.telemetry import get_tracer
 from src.services.ai.agent_prompt_service import AgentPromptService
+from src.services.ai.langgraph_messages import (
+    TOOL_COMPLETION_MESSAGES,
+    TOOL_STATUS_MESSAGES,
+)
 from src.services.ai.portfolio_analysis_service import PortfolioAnalysisService
 
 # Import tool factory functions (per-request tool creation to avoid race conditions)
@@ -495,29 +499,6 @@ class LangGraphAgentService:
         tracer = get_tracer()
         metrics = get_metrics_service()
 
-        # Map tool names to user-friendly status messages
-        tool_status_messages = {
-            "get_portfolio_holdings": "📊 Fetching your portfolio holdings...\n\n",
-            "analyze_portfolio_performance": "📈 Analyzing portfolio performance...\n\n",
-            "compare_portfolio_performance": "📊 Comparing portfolio performance...\n\n",
-            "search_recent_news": "🔍 Searching recent news...\n\n",
-            "research_company_fundamentals": "📊 Researching fundamentals...\n\n",
-            "get_company_overview": "🏢 Getting company overview...\n\n",
-            "get_market_overview": "🌍 Getting market overview...\n\n",
-            "get_real_time_prices": "💰 Fetching real-time stock prices...\n\n",
-        }
-
-        tool_completion_messages = {
-            "get_portfolio_holdings": "✓ Portfolio data retrieved\n\n",
-            "analyze_portfolio_performance": "✓ Analysis complete\n\n",
-            "compare_portfolio_performance": "✓ Comparison complete\n\n",
-            "search_recent_news": "✓ News retrieved\n\n",
-            "research_company_fundamentals": "✓ Fundamentals research complete\n\n",
-            "get_company_overview": "✓ Company overview retrieved\n\n",
-            "get_market_overview": "✓ Market overview retrieved\n\n",
-            "get_real_time_prices": "✓ Prices retrieved\n\n",
-        }
-
         tool_telemetry = _ToolTelemetryTracker(tracer, metrics)
         total_tokens_streamed = 0
 
@@ -545,16 +526,16 @@ class LangGraphAgentService:
                             logger.info(f"🔧 Tool called: {tool_name} with input: {tool_input}")
 
                             # Send user-friendly status message
-                            if tool_name in tool_status_messages:
-                                yield tool_status_messages[tool_name]
+                            if tool_name in TOOL_STATUS_MESSAGES:
+                                yield TOOL_STATUS_MESSAGES[tool_name]
 
                         case "on_tool_end":
                             tool_name, _, _ = tool_telemetry.end(event)
                             logger.info(f"Tool completed: {tool_name}")
 
                             # Send completion message
-                            if tool_name in tool_completion_messages:
-                                yield tool_completion_messages[tool_name]
+                            if tool_name in TOOL_COMPLETION_MESSAGES:
+                                yield TOOL_COMPLETION_MESSAGES[tool_name]
 
                         case "on_tool_error":
                             tool_name, _, error = tool_telemetry.error(event)
