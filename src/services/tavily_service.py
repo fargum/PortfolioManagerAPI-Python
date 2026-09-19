@@ -1,7 +1,7 @@
 """Async client for the Tavily web-search API."""
 import logging
 from typing import Optional
-
+import datetime as d
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -102,7 +102,7 @@ class TavilyService:
         name = company_name or ticker
         query = (
             f"{name} {ticker} P/E ratio EPS earnings per share analyst price target "
-            f"dividend yield payout ratio ex-dividend date dividend cover 2026"
+            f"dividend yield payout ratio ex-dividend date dividend cover " + str(d.datetime.now().year)
         )
         return await self._search(
             {
@@ -121,7 +121,7 @@ class TavilyService:
         name = company_name or ticker
         query = (
             f"{name} {ticker} company overview business model "
-            f"competitive position recent developments 2025"
+            f"competitive position recent developments " + str(d.datetime.now().year)
         )
         return await self._search(
             {
