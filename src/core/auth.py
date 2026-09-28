@@ -3,8 +3,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional
 
-from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import SecurityScopes
+from fastapi import Depends, HTTPException, Security, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
@@ -118,34 +117,24 @@ async def get_current_user_from_token(
     )
 
 
-async def _get_token(request: Request) -> Optional[dict]:
-    """Extract and validate the Azure AD token from the request."""
-    scheme = get_azure_scheme()
-    if scheme is None:
-        return None
-    auth_header = request.headers.get("Authorization", "MISSING")
-    logger.info(f"Auth header present: {auth_header != 'MISSING'}, value prefix: {auth_header[:20] if auth_header != 'MISSING' else 'N/A'}")
-    try:
-        result = await scheme(request, SecurityScopes())
-        if result is None:
-            return None
-        claims = result.model_dump() if hasattr(result, "model_dump") else dict(result)
-        logger.info(f"Token validated successfully for user: {claims.get('preferred_username') or claims.get('oid')}")
-        return claims
-    except Exception as e:
-        logger.warning(f"Token validation failed: {type(e).__name__}: {e}")
-        raise
+azure_scheme = get_azure_scheme()
 
+if azure_scheme:
 
-async def get_current_user(
-    token: Optional[dict] = Depends(_get_token)
-) -> CurrentUser:
-    """
-    FastAPI dependency to get current user from Azure AD token.
+    async def get_current_user(token: Any = Security(azure_scheme)) -> CurrentUser:
+        """Get the current user from a validated Azure AD token."""
+        claims = token.model_dump() if hasattr(token, "model_dump") else dict(token)
+        logger.info(
+            "Token validated successfully for user: %s",
+            claims.get("preferred_username") or claims.get("oid"),
+        )
+        return await get_current_user_from_token(claims)
 
-    This is the main entry point used by routes.
-    """
-    return await get_current_user_from_token(token)
+else:
+
+    async def get_current_user() -> CurrentUser:
+        """Reject requests when Azure AD authentication is not configured."""
+        return await get_current_user_from_token()
 
 
 async def get_current_account_id(

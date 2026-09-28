@@ -100,6 +100,7 @@ app = FastAPI(
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    swagger_ui_init_oauth={"usePkceWithAuthorizationCodeGrant": True},
     lifespan=lifespan
 )
 
