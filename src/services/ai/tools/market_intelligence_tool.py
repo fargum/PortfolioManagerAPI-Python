@@ -24,7 +24,7 @@ _NOT_CONFIGURED = {
 
 
 def _format_news_items(results: list[dict]) -> list[str]:
-    """Pre-format news results as markdown links, matching C# service output."""
+    """Pre-format news results as markdown links."""
     items = []
     for r in results:
         title = r.get("title", "")
