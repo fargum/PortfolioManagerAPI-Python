@@ -1,5 +1,22 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".venv/Scripts/python.exe .claude/hooks/guard_account_id.py",
+            "statusMessage": "Checking account_id security boundary..."
+          },
+          {
+            "type": "command",
+            "command": ".venv/Scripts/python.exe .claude/hooks/guard_tool_factory.py",
+            "statusMessage": "Checking AI tool factory pattern..."
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
@@ -7,6 +24,10 @@
           {
             "type": "command",
             "command": ".venv/Scripts/python.exe -m ruff check src/ --select E,F --quiet 2>&1 | head -20"
+          },
+          {
+            "type": "command",
+            "command": ".venv/Scripts/python.exe -m mypy src/ 2>&1 | head -20"
           }
         ]
       }
